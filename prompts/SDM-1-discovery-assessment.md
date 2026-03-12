@@ -93,6 +93,23 @@ Scan the repository for all Jenkins pipeline definitions:
 - File size and last modified date (from git history)
 - Whether it imports shared libraries
 
+### Shared Library Wrapper Detection
+
+After locating Jenkinsfiles, check whether any are **thin wrappers** — Jenkinsfiles that contain little to no inline pipeline logic and instead delegate entirely to a shared library function. Common indicators:
+
+- The entire Jenkinsfile is a single function call (e.g., `orgPipeline(...)`, `buildAndDeploy(...)`)
+- No `pipeline {}` block, no `stage {}` definitions, no `steps {}` blocks
+- The file is very short (under ~10 lines of actual code, excluding comments)
+- Parameters are passed as a map to a top-level function rather than declared inline
+
+**If a wrapper pattern is detected, STOP and inform the user:**
+
+> This Jenkinsfile delegates its entire pipeline logic to a shared library function (`<functionName>`). The actual stages, credentials, plugins, and deployment logic live in the shared library source code, not in this file. To complete discovery, I need access to the shared library.
+>
+> Do you have the shared library repository available locally? If so, please provide the path (e.g., `~/repos/jenkins-shared-lib/vars/`).
+
+**Do not proceed past Step 1 until shared library source is available.** Without it, the discovery report will be incomplete — the Jenkinsfile alone does not contain the information needed for Steps 2–7.
+
 ## Step 2: Pipeline Classification
 
 For each Jenkinsfile found, classify:
