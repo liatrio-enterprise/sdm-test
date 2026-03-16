@@ -35,7 +35,7 @@ This discovery phase serves as the **foundation** for the entire SDM workflow:
 - **Jenkins Estate → Discovery**: Audits existing pipelines, plugins, credentials, and infrastructure
 - **Discovery → Migration Spec**: Provides the factual basis for migration planning
 - **Migration Spec → Tasks**: Enables accurate task breakdown with known risks
-- **Tasks → Implementation → Validation**: Ensures nothing is missed during migration
+- **Tasks → Implementation**: Guides structured migration execution
 
 **Critical Dependencies:**
 
@@ -53,6 +53,12 @@ This discovery phase serves as the **foundation** for the entire SDM workflow:
 - Undocumented credentials → authentication failures in GHA
 - Unknown shared library dependencies → incomplete migration scope
 - Skipped integration point analysis → broken external connections post-migration
+
+### Output Type Rule
+
+- If the source is a **Jenkinsfile** (application pipeline) that does **not** call shared libraries, the output is a **GitHub Actions workflow** placed in the application repository's `.github/workflows/<name>.yml`
+- If the source is a **Jenkinsfile** that **calls shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** (`.github/workflows/reusable-<name>.yml`) invoked via `workflow_call`. The application workflow calls this reusable workflow. **You must ask the user where the reusable workflow should live** — it may belong in the application repo, a dedicated shared-workflows repo, or an organization-level repo, depending on how many teams consume the library
+- If the source is a **standalone shared library** (`vars/*.groovy`, `src/**/*.groovy`) being migrated independently, the output is a **reusable workflow** and the user must be prompted for the target repository
 
 ## Your Role
 
@@ -160,6 +166,8 @@ Detect plugin usage from Jenkinsfile syntax. Create a comprehensive inventory:
 
 ## Step 4: Credentials Audit
 
+> **Note:** Credentials are inventoried here for awareness and post-migration tracking. The actual secret configuration in GitHub Actions is a post-migration activity — not part of the core pipeline output.
+
 Document all credentials referenced in the pipeline(s). **Never extract or display actual secret values.**
 
 | Credential ID | Type | Usage Context | Stage(s) Used In |
@@ -255,6 +263,29 @@ Identify all external systems the pipeline connects to:
 |---|---|---|---|
 | [e.g., Production deploy] | Deploy-Prod | [team/individuals] | [timeout duration] |
 
+### CLI-to-Action Opportunities
+
+Scan all `sh` / `bat` steps for CLI tool usage where a major platform vendor provides an official GitHub Action. These represent opportunities to replace raw shell commands with purpose-built, maintained actions that handle authentication, error handling, and output parsing natively.
+
+**Common replacements to look for:**
+
+| CLI / Tool Usage | Official GHA Replacement | Vendor |
+|---|---|---|
+| `az login`, `az cli ...` | `Azure/login`, `Azure/cli` | Microsoft |
+| `aws sts`, `aws s3`, `aws ecr ...` | `aws-actions/configure-aws-credentials`, `aws-actions/amazon-ecr-login` | AWS |
+| `gcloud auth`, `gcloud ...` | `google-github-actions/auth`, `google-github-actions/setup-gcloud` | Google |
+| `docker login`, `docker build`, `docker push` | `docker/login-action`, `docker/build-push-action` | Docker |
+| `kubectl apply`, `helm upgrade` | `Azure/k8s-deploy`, `azure/k8s-set-context` | Microsoft |
+| `terraform init/plan/apply` | `hashicorp/setup-terraform` | HashiCorp |
+| `node/npm/yarn` setup | `actions/setup-node` | GitHub |
+| `java/maven/gradle` setup | `actions/setup-java` | GitHub |
+| `python/pip` setup | `actions/setup-python` | GitHub |
+| `go` setup | `actions/setup-go` | GitHub |
+| `slack` webhook/API calls | `slackapi/slack-github-action` | Slack |
+| `sonar-scanner` | `sonarsource/sonarqube-scan-action` | SonarSource |
+
+Record any CLI-to-action opportunities found. These will be included in the post-migration document as recommended action replacements, with each action pinned to a full commit SHA.
+
 ## Step 8: Scope Assessment
 
 Evaluate whether this migration request is appropriately sized.
@@ -317,9 +348,6 @@ Evaluate whether this migration request is appropriately sized.
 
 ## Risk Assessment
 [Table rating each component: High/Medium/Low risk with rationale]
-
-## Recommended Migration Order
-[Ordered list of what to migrate first, second, etc. with justification]
 
 ## Open Questions
 [Any questions that could not be answered from the pipeline files alone]

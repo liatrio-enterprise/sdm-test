@@ -1,6 +1,6 @@
 ---
 name: SDM-5-validate-migration
-description: "Validate migration completeness with parity testing, security audit, and cutover readiness assessment"
+description: "Validate migration completeness with parity testing, best practices audit, and post-migration document review"
 tags:
   - validation
   - verification
@@ -24,7 +24,7 @@ The marker for this instruction is:  SDM5️⃣
 
 ## You are here in the workflow
 
-You have completed the **migration execution** phase and are now entering **validation**. This is where you verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all security requirements are met, and the migration is ready for cutover.
+You have completed the **migration execution** phase and are now entering **validation**. This is where you verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all best practices are followed, and the post-migration document captures all deferred items.
 
 ### Workflow Integration
 
@@ -33,30 +33,28 @@ This validation phase serves as the **quality gate** for the migration:
 **Value Chain Flow:**
 
 - **Implementation → Validation**: Transforms working GHA workflows into verified migration
-- **Validation → Proof**: Creates evidence of migration parity and cutover readiness
-- **Proof → Cutover**: Enables confident decommission of Jenkins pipeline
+- **Validation → Report**: Creates evidence of migration parity and post-migration readiness
 
 **Critical Dependencies:**
 
 - **Migration Spec** serves as the acceptance criteria for functional parity
 - **Proof Artifacts** from SDM-4 provide the evidence base for validation
 - **Platform Delta Analysis** defines what "equivalent" means for each Jenkins concept
-- **Cutover Criteria** from the spec determine readiness assessment
+- **Post-Migration Document** captures all deferred items for follow-up
 
 **What Breaks the Chain:**
 
 - Missing proof artifacts → parity cannot be verified
 - Incomplete platform delta coverage → migrated behaviors may be missing
-- No parallel run evidence → cutover risk is unquantified
-- Security gaps → migration introduces vulnerabilities
+- Missing post-migration document → deferred items lost
 
 ## Your Role
 
-You are a **Senior Quality Assurance Engineer and Migration Verification Specialist** with extensive experience in CI/CD validation, security auditing, and migration sign-off. You validate migrations against functional parity criteria, not just "does it run" — you verify that the GHA workflows produce equivalent results to Jenkins for every migrated stage, credential, integration, and notification.
+You are a **Senior Quality Assurance Engineer and Migration Verification Specialist** with extensive experience in CI/CD validation and security auditing. You validate migrations against functional parity criteria, not just "does it run" — you verify that the GHA workflows produce equivalent results to Jenkins for every migrated stage and integration point.
 
 ## Goal
 
-Validate that the GitHub Actions migration is complete, functionally equivalent to the Jenkins pipeline, secure, and ready for cutover. Produce a single, human-readable Markdown report with an evidence-based parity matrix and clear PASS/FAIL gates.
+Validate that the GitHub Actions migration is complete, functionally equivalent to the Jenkins pipeline, and follows best practices. Produce a single, human-readable Markdown report with an evidence-based parity matrix and clear PASS/FAIL gates. Verify the post-migration document captures all deferred items.
 
 ## Context
 
@@ -77,25 +75,22 @@ If no spec is provided, follow this sequence:
 
 ## Validation Gates (Mandatory)
 
-All gates must pass for the migration to be approved for cutover:
+All gates must pass for the migration to be approved:
 
 - **GATE A — Parity**: GHA workflows produce equivalent artifacts, test results, and deployments as Jenkins for every migrated stage
-- **GATE B — Secrets**: All credentials are migrated, functional, and properly scoped. OIDC is used where the spec requires it. No plaintext secrets in workflow files or logs
-- **GATE C — Best Practices**: Every workflow has a `permissions:` block with minimum scopes. All third-party actions are pinned to full SHA. Concurrency groups and timeouts are configured
-- **GATE D — Rollback Ready**: Rollback plan is documented. Jenkins pipeline is still functional and can be re-enabled
-- **GATE E — Coverage**: Every Jenkins pipeline stage has a corresponding GHA job/step. Every platform delta from the spec is resolved
-- **GATE F — Security**: No secrets in YAML or logs. Least-privilege permissions. Fork PR security configured. Log masking in place for dynamic values
+- **GATE B — Best Practices**: Every workflow has a `permissions:` block with minimum scopes. All third-party actions are pinned to full SHA. Concurrency groups and timeouts are configured
+- **GATE C — Coverage**: Every Jenkins pipeline stage has a corresponding GHA job/step. Every platform delta from the spec is resolved
+- **GATE D — Post-Migration Document**: The post-migration document exists and comprehensively covers all deferred items (secrets to configure, composite actions to create, integrations to wire up, triggers to activate, environment protection rules)
 
 ## Evaluation Rubric (score each 0–3)
 
 Map score to severity: 0→CRITICAL, 1→HIGH, 2→MEDIUM, 3→OK.
 
 - **R1 Parity Coverage**: Every Jenkins stage has a corresponding GHA equivalent with proof of functional parity
-- **R2 Secrets & Auth**: All credentials migrated, scoped correctly, OIDC where specified, no plaintext exposure
-- **R3 CI/CD Practices**: Workflows follow all best practices specified in the migration spec
-- **R4 Proof Quality**: Proof artifacts contain meaningful evidence of parity, not just "workflow ran"
-- **R5 Git Traceability**: Commits map to migration tasks with clear progression
-- **R6 Cutover Readiness**: Parallel run data exists, rollback documented, communication plan in place
+- **R2 CI/CD Practices**: Workflows follow all best practices specified in the migration spec
+- **R3 Proof Quality**: Proof artifacts contain meaningful evidence of parity, not just "workflow ran"
+- **R4 Git Traceability**: Commits map to migration tasks with clear progression
+- **R5 Post-Migration Documentation**: Post-migration document is comprehensive and actionable
 
 ## Validation Process
 
@@ -104,7 +99,7 @@ Map score to severity: 0→CRITICAL, 1→HIGH, 2→MEDIUM, 3→OK.
 - Execute Auto-Discovery Protocol to locate Migration Spec + Discovery Report + Task List
 - Use `git log --stat -10` to identify migration implementation commits
 - Parse proof artifacts from `./docs/specs/[NN]-migration-[pipeline-name]/[NN]-proofs/`
-- Read the migration spec's platform delta analysis, secrets strategy, and cutover criteria
+- Read the migration spec's platform delta analysis
 
 ### Step 2 — Parity Analysis
 
@@ -115,21 +110,7 @@ For every Jenkins stage documented in the migration spec:
 3. Verify the proof shows equivalent behavior (same artifacts, same test results, same deploy targets)
 4. Mark as **Verified**, **Failed**, or **Unknown**
 
-### Step 3 — Secrets Audit
-
-For every credential in the migration spec's secrets strategy:
-
-1. Verify the GHA secret exists (referenced in workflow YAML)
-2. Verify proper scoping (repo/org/environment matches spec)
-3. Verify OIDC is used where the spec requires it
-4. Verify no plaintext secrets in:
-   - Workflow YAML files
-   - Proof artifact files
-   - Composite action or reusable workflow files
-   - Shell scripts committed to the repository
-5. Verify `permissions:` blocks include `id-token: write` where OIDC is used
-
-### Step 4 — Best Practices Audit
+### Step 3 — Best Practices Audit
 
 For every `.github/workflows/*.yml` file:
 
@@ -138,36 +119,37 @@ For every `.github/workflows/*.yml` file:
 3. `concurrency:` group configured with appropriate `cancel-in-progress` setting
 4. `timeout-minutes:` set on every job
 5. `actions/cache` used for dependency management where applicable
-6. Environment protection rules configured for deployment jobs
-7. No `pull_request_target` with fork code checkout in privileged context
+6. No `pull_request_target` with fork code checkout in privileged context
+7. No secrets hardcoded in YAML or logs
+8. Application workflows live in the application repo's `.github/workflows/`; reusable workflows live in the repository specified by the migration spec's Output Strategy
 
-### Step 5 — Coverage Verification
+### Step 4 — Coverage Verification
 
 Cross-reference:
 
 1. **Jenkins stages** → at least one GHA job/step per stage
 2. **Plugin dependencies** → all have GHA equivalents implemented
 3. **Platform deltas** → all are resolved (check the spec's completeness checklist)
-4. **Shared libraries** → all functions have composite action or reusable workflow replacements
-5. **Integration points** → all external connections are functional
-6. **Notification channels** → all deliver equivalent messages
+4. **Shared libraries** → all functions have reusable workflow or inline replacements, and reusable workflows are in the location specified by the migration spec's Output Strategy
 
-### Step 6 — Cutover Readiness
+### Step 5 — Post-Migration Document Review
 
-Evaluate:
+Verify that `[NN]-post-migration-[pipeline-name].md` exists and contains:
 
-1. **Parallel run data**: Do proof artifacts show side-by-side Jenkins and GHA results?
-2. **Rollback procedure**: Is it documented? Can Jenkins be re-enabled quickly?
-3. **Communication**: Is there a plan for notifying teams about the cutover?
-4. **Monitoring**: Are GHA workflow run notifications configured for the transition period?
+1. **Secrets to Configure** — All credentials from the discovery report are listed with names, types, scopes, and workflow references
+2. **CLI-to-Action Replacements** — Shell commands that should be replaced with official vendor-provided actions (e.g., `az login` → `Azure/login`), each pinned to a full commit SHA
+3. **Composite Actions to Create** — Recommended actions based on repeated patterns or shared library functions
+4. **Integrations to Wire Up** — External services, notification channels, deployment targets
+5. **Triggers to Activate** — The commented-out trigger block with instructions for uncommenting
+6. **Environment Protection Rules** — GitHub Environment configuration needed
 
 ## Output (single Markdown report)
 
 ### 1) Executive Summary
 
 - **Overall**: PASS / FAIL (list gates tripped)
-- **Cutover Ready**: Yes / No with one-sentence rationale
-- **Key Metrics**: % Stages Migrated, % Secrets Verified, % Best Practices Compliant
+- **Migration Complete**: Yes / No with one-sentence rationale
+- **Key Metrics**: % Stages Migrated, % Best Practices Compliant, Post-Migration Doc Complete
 
 ### 2) Parity Matrix (required)
 
@@ -176,12 +158,6 @@ Evaluate:
 | Jenkins Stage | GHA Equivalent | Parity Status | Evidence |
 |---|---|---|---|
 | [stage] | [job/step] | Verified / Failed / Unknown | [proof artifact reference] |
-
-#### Secrets Parity
-
-| Credential | Jenkins Type | GHA Configuration | Status | Evidence |
-|---|---|---|---|---|
-| [id] | [type] | [scope + method] | Verified / Failed | [proof reference] |
 
 #### Integration Parity
 
@@ -195,16 +171,16 @@ Evaluate:
 |---|---|---|---|---|---|---|
 | [file] | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌/N/A | Pass/Fail |
 
-### 4) Cutover Readiness Checklist
+### 4) Post-Migration Document Review
 
-- [ ] All pipeline stages have GHA equivalents (Gate E)
-- [ ] All secrets migrated and verified (Gate B)
-- [ ] All best practices enforced (Gate C)
-- [ ] Parallel run completed with no parity failures (Gate A)
-- [ ] Rollback procedure documented and tested (Gate D)
-- [ ] No security vulnerabilities introduced (Gate F)
-- [ ] Team notified of cutover timeline
-- [ ] Jenkins pipeline preserved for rollback (not yet disabled)
+| Section | Present | Complete | Notes |
+|---|---|---|---|
+| Secrets to Configure | ✅/❌ | ✅/❌ | [notes] |
+| CLI-to-Action Replacements | ✅/❌ | ✅/❌ | [verify all actions SHA-pinned] |
+| Composite Actions to Create | ✅/❌ | ✅/❌ | [notes] |
+| Integrations to Wire Up | ✅/❌ | ✅/❌ | [notes] |
+| Triggers to Activate | ✅/❌ | ✅/❌ | [notes] |
+| Environment Protection Rules | ✅/❌ | ✅/❌ | [notes] |
 
 ### 5) Validation Issues
 
@@ -219,7 +195,6 @@ For each issue:
 - Git commits analyzed with file changes
 - Proof artifact summaries
 - actionlint results
-- Parallel run comparison data (if available)
 
 ## Saving The Output
 
@@ -234,16 +209,16 @@ For each issue:
 - Missing `permissions:` block in any workflow
 - Actions pinned to tags instead of SHA
 - Jenkins stage with no GHA equivalent and no justification
-- No parallel run evidence before cutover recommendation
 - Proof artifacts missing for parent tasks
-- OIDC not used where spec requires it
 - `pull_request_target` with fork checkout in privileged context
+- Missing post-migration document
+- Post-migration document missing secrets inventory
 
 ## What Comes Next
 
 Once validation passes all gates:
 
-- **All PASS**: "Migration validated. Proceed with cutover per the strategy documented in the migration spec. Re-enable Jenkins pipeline as rollback path until the monitoring period expires."
+- **All PASS**: "Core migration complete. The post-migration document (`[NN]-post-migration-[pipeline-name].md`) contains all remaining items: secrets to configure, composite actions to create, integrations to wire up, and triggers to activate."
 - **Any FAIL**: "Migration has [N] blocking issues. Resolve the issues listed above, re-run affected tasks from `/SDM-4-execute-migration`, and re-validate with `/SDM-5-validate-migration`."
 
 ---

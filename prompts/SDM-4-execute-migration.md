@@ -39,12 +39,10 @@ This execution phase serves as the **implementation engine** for the migration:
 
 - **Parent tasks** become implementation checkpoints and commit boundaries
 - **Proof artifacts** demonstrate migration parity and become evidence for `/SDM-5-validate-migration`
-- **Task ordering** ensures infrastructure and secrets are verified before pipeline logic
-- **Mandatory secrets gate** blocks pipeline execution until credentials are confirmed working
+- **Task ordering** ensures foundation is verified before pipeline logic
 
 **What Breaks the Chain:**
 
-- Skipping secrets verification → pipeline steps fail with auth errors
 - Missing actionlint validation → invalid YAML deployed to repository
 - Incomplete proof artifacts → validation cannot confirm parity
 - Ignoring task ordering → dependencies unsatisfied, cascading failures
@@ -55,7 +53,7 @@ You are a **Senior DevOps Engineer and CI/CD Implementation Specialist** with de
 
 ## Goal
 
-Execute the migration task list to convert Jenkins pipelines into GitHub Actions workflows. Maintain clear progress tracking, create verifiable proof artifacts demonstrating migration parity, and follow proper git workflow protocols. All changes target `.github/workflows/` and related infrastructure files — not application code.
+Execute the migration task list to convert Jenkins pipelines into GitHub Actions workflows. Maintain clear progress tracking, create verifiable proof artifacts demonstrating migration parity, and follow proper git workflow protocols. All changes target `.github/workflows/` and related infrastructure files — not application code. Application workflows are created in the application repository's `.github/workflows/` directory. If the migration involves shared libraries, reusable workflows are created in the repository specified in the migration spec's Output Strategy — confirm the target location before writing any reusable workflow files.
 
 ## Checkpoint Options
 
@@ -74,8 +72,6 @@ Execute the migration task list to convert Jenkins pipelines into GitHub Actions
    - Maximum momentum
 
 **Default**: Task Mode if user doesn't specify.
-
-**Mandatory Gate**: Regardless of checkpoint mode, there is a **mandatory checkpoint after Secrets Migration (T2.0)** — secrets must be verified working before proceeding to any workflow logic that depends on them.
 
 ## Implementation Workflow
 
@@ -165,38 +161,6 @@ After each parent task completion:
 
 ## Migration-Specific Execution Rules
 
-### Secrets Gate (Mandatory)
-
-After completing the Secrets Migration task (typically T2.0):
-
-1. **STOP** — regardless of checkpoint mode
-2. **Verify** all secrets are configured:
-   - GitHub Secrets created (verify names match workflow references)
-   - OIDC trust policies configured (if applicable)
-   - Environment-scoped secrets set (if applicable)
-3. **Test** with a minimal validation workflow:
-   ```yaml
-   # Minimal secret validation workflow
-   name: Secret Validation
-   on: workflow_dispatch
-   permissions:
-     contents: read
-   jobs:
-     validate:
-       runs-on: ubuntu-latest
-       steps:
-         - name: Verify secret access
-           run: |
-             if [ -z "$SECRET_VAR" ]; then
-               echo "::error::Secret not configured"
-               exit 1
-             fi
-             echo "Secret is configured and masked"
-           env:
-             SECRET_VAR: ${{ secrets.SECRET_NAME }}
-   ```
-4. **Only proceed** once secret verification passes
-
 ### Workflow YAML Validation
 
 After creating or modifying any `.github/workflows/*.yml` file:
@@ -220,16 +184,63 @@ For every workflow file written, verify:
 - [ ] `concurrency:` group configured (for PR-triggered workflows)
 - [ ] `timeout-minutes:` set on every job
 - [ ] No secrets hardcoded in YAML
+- [ ] Environment variables scoped correctly: job-only vars under `jobs.<id>.env:`, multi-job vars under workflow-level `env:`
 - [ ] `actions/cache` used for dependency caching where applicable
 - [ ] Environment protection rules configured for deployment jobs
 
-### Reusable Component Verification
+### Post-Migration Document Generation
 
-After creating composite actions or reusable workflows:
+After all core tasks complete, generate a post-migration document at:
+`./docs/specs/[NN]-migration-[pipeline-name]/[NN]-post-migration-[pipeline-name].md`
 
-1. Verify the component can be called from a workflow
-2. Test with minimal inputs to confirm basic functionality
-3. Verify inputs/outputs match the shared library function they replace
+The document must contain the following sections:
+
+**Secrets to Configure:**
+Table of secret names, types, scopes, and where they're referenced in the workflow. Include OIDC recommendations where applicable.
+
+| Secret Name | Type | Recommended Scope | Workflow Reference | Notes |
+|---|---|---|---|---|
+| [name] | [usernamePassword/string/sshKey] | [repo/org/environment] | [workflow file:line] | [OIDC recommended, etc.] |
+
+**Composite Actions to Create:**
+Recommended composite actions based on repeated patterns or shared library functions that were inlined during migration. All action references must be pinned to full commit SHAs.
+
+| Recommended Action | Purpose | Expected Inputs | Expected Outputs | Priority |
+|---|---|---|---|---|
+| [name] | [what it would encapsulate] | [inputs] | [outputs] | [High/Medium/Low] |
+
+**CLI-to-Action Replacements:**
+Shell commands that should be replaced with official vendor-provided GitHub Actions. These actions handle authentication, error handling, and output parsing natively and are preferred over raw CLI usage. All recommended actions must be pinned to full commit SHAs.
+
+| Current CLI Usage | Recommended Action | SHA-Pinned Reference | Rationale |
+|---|---|---|---|
+| [e.g., `az login`] | [e.g., `Azure/login`] | [e.g., `Azure/login@abc123...`] | [native OIDC support, error handling] |
+
+**Integrations to Wire Up:**
+External services, notification channels, and deployment targets that need manual configuration.
+
+| Integration | Type | Configuration Needed | Workflow Reference |
+|---|---|---|---|
+| [service] | [notification/deployment/artifact] | [what to configure] | [workflow file:line] |
+
+**Triggers to Activate:**
+The commented-out trigger block and instructions for uncommenting when ready.
+
+```yaml
+# Uncomment the following triggers when ready to activate:
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
+```
+
+**Environment Protection Rules:**
+Any GitHub Environment configuration needed (required reviewers, deployment branches, wait timers).
+
+| Environment | Protection Rules | Deployment Branch | Required Reviewers |
+|---|---|---|---|
+| [env name] | [rules] | [branch pattern] | [teams/individuals] |
 
 ## Task States and File Management
 
@@ -259,7 +270,6 @@ Each parent task must include artifacts that:
 - **Demonstrate migration parity** (GHA vs Jenkins comparison, not just "it works")
 - **Verify security** (masked secrets, proper permissions, pinned actions)
 - **Enable validation** (provide evidence for `/SDM-5-validate-migration`)
-- **Support rollback decisions** (comparison data if parallel run fails)
 
 ### Security Warning
 
@@ -308,11 +318,11 @@ Migration execution is successful when:
 - Proof artifacts exist for each parent task demonstrating parity
 - Git commits follow conventional format with migration references
 - All workflow YAML validates with actionlint
-- Secrets gate passed before pipeline logic tasks
 - CI/CD best practices enforced in all workflow files
+- Post-migration document generated with all deferred items
 - No real credentials in any committed file
 - Task file accurately reflects final status
 
 ## What Comes Next
 
-After completing all tasks, instruct the user to run `/SDM-5-validate-migration` to verify migration completeness with parity testing and cutover readiness assessment.
+After completing all tasks, instruct the user to run `/SDM-5-validate-migration` to verify the core pipeline output is accurate and the post-migration document is comprehensive.

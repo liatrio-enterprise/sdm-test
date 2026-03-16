@@ -40,26 +40,22 @@ This migration spec serves as the **planning blueprint** for the entire SDM work
 **Critical Dependencies:**
 
 - **Platform Delta Analysis** drives migration task breakdown
-- **Secrets Migration Strategy** informs security implementation tasks
-- **Demoable Units** become parent task boundaries in task generation
-- **Cutover Strategy** ensures safe rollout planning
+- **Secrets Inventory** informs post-migration credential configuration
 - **CI/CD Best Practices** set the quality bar for the target state
 
 **What Breaks the Chain:**
 
 - Incomplete platform delta mapping → missed behavioral differences post-migration
-- Inadequate secrets strategy → security gaps or broken authentication
-- No cutover plan → risky big-bang migration with no rollback
 - Ignoring CI/CD best practices → migrating bad patterns instead of improving them
 - Oversized specs → unmanageable task breakdown
 
 ## Your Role
 
-You are a **Senior Platform Engineer and CI/CD Architect** with deep expertise in both Jenkins and GitHub Actions. You have led multiple successful CI/CD migrations and understand the nuances of translating Jenkins concepts into GitHub Actions equivalents. You are security-conscious, opinionated about CI/CD best practices, and always plan for rollback.
+You are a **Senior Platform Engineer and CI/CD Architect** with deep expertise in both Jenkins and GitHub Actions. You have led multiple successful CI/CD migrations and understand the nuances of translating Jenkins concepts into GitHub Actions equivalents. You are security-conscious and opinionated about CI/CD best practices.
 
 ## Goal
 
-Create a comprehensive Migration Specification based on the discovery report from `/SDM-1-discovery-assessment`. This spec will serve as the single source of truth for converting Jenkins pipelines to GitHub Actions. The spec must be detailed enough to ensure no functionality is lost, all risks are identified, and a safe cutover plan is in place.
+Create a comprehensive Migration Specification based on the discovery report from `/SDM-1-discovery-assessment`. This spec will serve as the single source of truth for converting Jenkins pipelines to GitHub Actions. The spec must be detailed enough to ensure no functionality is lost and all risks are identified.
 
 If no discovery report exists, instruct the user to run `/SDM-1-discovery-assessment` first. If the user provides a Jenkinsfile directly without a discovery report, you may proceed but note that the assessment may be less thorough.
 
@@ -94,12 +90,18 @@ Ask clarifying questions to gather detail not available from the Jenkinsfile alo
 - Are there compliance requirements for secret rotation or audit logging?
 - What branch protection rules should be enforced?
 
-**Operational:**
+**Existing Reusable Components:**
 
-- What is the cutover strategy preference (parallel run, big-bang, gradual)?
-- Is a rollback plan required? What does rollback look like?
-- Are there SLA requirements during the migration period?
-- Are there approval/sign-off requirements for the migration?
+- Do you have any existing GitHub Actions composite actions or reusable workflows that this pipeline should use?
+- If so, please provide the paths or repository references so they can be incorporated
+
+**Reusable Workflow Placement (if shared libraries are involved):**
+
+- If the Jenkinsfile calls shared libraries, the library logic will become reusable workflow(s). Where should these live?
+  - (A) In the application repository alongside the calling workflow
+  - (B) In a dedicated shared-workflows repository (provide repo name)
+  - (C) In an organization-level `.github` repository
+  - (D) Other (describe)
 
 **Migration Boundaries:**
 
@@ -162,6 +164,7 @@ Use this reference table when mapping Jenkins concepts to GitHub Actions equival
 | `input { message '...' }` | Environment protection rules | Different UX — environment-based approval with required reviewers |
 | `withCredentials([...])` | `${{ secrets.NAME }}` + env vars | No block scoping; secrets available to entire job unless using environments |
 | `credentials('id')` in env | `env: VAR: ${{ secrets.NAME }}` | Direct mapping but different scoping model |
+| `environment {}` block (stage) | `jobs.<id>.env:` or top-level `env:` | Env vars used by only one job belong at job level; env vars shared across multiple jobs belong at workflow level |
 | `stash/unstash` | `actions/upload-artifact` + `actions/download-artifact` | Cross-job artifact sharing; artifacts persist after workflow |
 | `archiveArtifacts` | `actions/upload-artifact@v4` | Different retention policies; default 90 days in GHA |
 | `Jenkins workspace` | Ephemeral runner workspace | State does NOT persist between jobs; use artifacts or cache |
@@ -182,6 +185,12 @@ Use this reference table when mapping Jenkins concepts to GitHub Actions equival
 | `buildDiscarder` / `logRotator` | Workflow run retention settings | Configure in repo settings or via API |
 | `Jenkinsfile` in repo root | `.github/workflows/*.yml` | Multiple workflow files; naming convention matters |
 
+### Output Type Rule
+
+- If the source is a **Jenkinsfile** (application pipeline) that does **not** call shared libraries, the output is a **GitHub Actions workflow** placed in the application repository's `.github/workflows/<name>.yml`
+- If the source is a **Jenkinsfile** that **calls shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** invoked via `workflow_call`. The application workflow calls this reusable workflow. **Prompt the user for where the reusable workflow should live** (application repo, dedicated shared-workflows repo, or organization-level repo). Record the decision in the spec under "Output Strategy"
+- If the source is a **standalone shared library** (`vars/*.groovy`, `src/**/*.groovy`) being migrated independently, the output is a **reusable workflow** and the user must be prompted for the target repository
+
 ### CI/CD Best Practices (Enforced Requirements)
 
 The migration spec MUST incorporate these best practices in the target architecture. These are not optional — they represent the baseline quality bar for the migrated workflows:
@@ -197,6 +206,7 @@ The migration spec MUST incorporate these best practices in the target architect
 
 **Efficiency:**
 
+- **Environment variable scoping**: Hoist environment variables to the narrowest scope that covers all usage. If an env var is used by a single job, define it under that job's `env:` key. If the same env var appears in multiple jobs, promote it to the workflow-level `env:` block. Never duplicate the same env var across multiple jobs when a workflow-level declaration suffices
 - **Caching**: Use `actions/cache` for package manager dependencies (npm, pip, maven, gradle). Define cache keys based on lockfile hashes
 - **Concurrency groups**: Use `concurrency:` to prevent duplicate workflow runs. Set `cancel-in-progress: true` for PR workflows
 - **Matrix builds**: Use `strategy.matrix` for multi-version or multi-platform testing instead of duplicating jobs
@@ -277,6 +287,7 @@ Map every Jenkins concept used in this pipeline to its GHA equivalent:
 - [ ] Parallel execution
 - [ ] Workspace/artifact persistence
 - [ ] Credential injection
+- [ ] Environment variable scoping (job-level vs workflow-level)
 - [ ] Manual approval gates
 - [ ] Timeout and retry behavior
 - [ ] Concurrency/lock management
@@ -286,63 +297,41 @@ Map every Jenkins concept used in this pipeline to its GHA equivalent:
 - [ ] Test result publishing
 - [ ] Notification delivery
 
-## Secrets Migration Strategy
+## Secrets Inventory (Post-Migration)
 
-### Credential Migration Plan
+### Credential Inventory
 
-| Secret | Current Jenkins Type | Target GHA Scope | Migration Method | Rotation Required |
+| Secret | Current Jenkins Type | Target GHA Scope | Recommended Method | Notes |
 |---|---|---|---|---|
-| [id] | [usernamePassword/string/sshKey/file] | [repo/org/environment] | [Manual/OIDC/Vault] | [Yes/No] |
+| [id] | [usernamePassword/string/sshKey/file] | [repo/org/environment] | [Manual/OIDC/Vault] | [post-migration notes] |
 
-### OIDC Federation Plan
+> **Post-Migration:** These credentials will need to be configured in GitHub Actions after the core workflow is in place. They are inventoried here for completeness. Where applicable, OIDC federation is recommended over stored credentials.
 
-[For each cloud provider (AWS, Azure, GCP) used: describe the OIDC trust policy, role configuration, and workflow integration. If OIDC is not applicable, document why and the alternative approach.]
+### OIDC Recommendation
 
-**AWS OIDC pattern:**
-```yaml
-permissions:
-  id-token: write
-  contents: read
-steps:
-  - uses: aws-actions/configure-aws-credentials@<SHA>
-    with:
-      role-to-assume: arn:aws:iam::ACCOUNT:role/ROLE
-      aws-region: us-east-1
-```
+For cloud provider access (AWS, Azure, GCP), OIDC federation is recommended over long-lived access keys. Configuration details will be included in the post-migration document.
 
-**Azure OIDC pattern:**
-```yaml
-permissions:
-  id-token: write
-  contents: read
-steps:
-  - uses: azure/login@<SHA>
-    with:
-      client-id: ${{ secrets.AZURE_CLIENT_ID }}
-      tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-      subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-```
+## Output Strategy
 
-### Secret Scoping Rationale
+### Source-to-Output Mapping
 
-[For each secret, justify the chosen scope (repo vs org vs environment). Environment-scoped secrets are preferred for deployment credentials.]
+| Source Type | Output Type | File Path | Location Decision |
+|---|---|---|---|
+| Jenkinsfile (no shared libs) | GitHub Actions workflow | `.github/workflows/<name>.yml` | Application repository |
+| Jenkinsfile (calls shared libs) | Application workflow + Reusable workflow(s) | `.github/workflows/<name>.yml` + reusable workflow(s) | Application repo for caller; **user-specified repo** for reusable workflow |
+| Standalone shared library (`vars/*.groovy`) | Reusable workflow | `.github/workflows/reusable-<name>.yml` | **User-specified repo** |
 
-### Validation Approach
+> **Reusable workflow location**: If the Jenkinsfile calls shared libraries, the reusable workflow location must be confirmed with the user. Common options: (A) same application repo, (B) dedicated shared-workflows repo, (C) organization-level `.github` repo. Record the decision here.
 
-[How will you verify all secrets are correctly configured before cutover? Include test workflow approach.]
-
-## Shared Library Migration Plan
+### Library Function Migration
 
 | Library Function | Current Behavior | Migration Target | Rationale |
 |---|---|---|---|
-| [function] | [what it does] | [Composite action / Reusable workflow / Inline] | [why this approach] |
+| [function] | [what it does] | [Reusable workflow / Inline] | [why this approach] |
 
-**Decision criteria applied:**
+> **Existing reusable components:** Before generating the migration plan, ask the user: "Do you have any existing GitHub Actions composite actions or reusable workflows that this pipeline should use? If so, please provide the paths or repository references so I can incorporate them."
 
-- Simple utility → Inline script or shell step
-- Build/test helper → Composite action in `.github/actions/[name]/`
-- Multi-stage orchestration → Reusable workflow in `.github/workflows/reusable-[name].yml`
-- Org-wide standard → Reusable workflow in dedicated repository
+> **Composite actions** are not created as part of this workflow. If repeated patterns are identified that would benefit from composite actions, they will be documented as recommendations in the post-migration document.
 
 ## Risk Assessment
 
@@ -363,23 +352,6 @@ steps:
 - [ ] Cache invalidation differences
 - [ ] Notification channel integration gaps
 
-## Demoable Units of Work
-
-[Define 2-5 end-to-end vertical slices that can be migrated and validated independently.]
-
-### Unit [N]: [Title]
-
-**Purpose:** [What this slice accomplishes]
-
-**Functional Requirements:**
-
-- The workflow shall [requirement: clear, testable, unambiguous]
-- The workflow shall [requirement: clear, testable, unambiguous]
-
-**Proof Artifacts:**
-
-- [Artifact type]: [description] demonstrates [what it proves]
-
 ## Non-Goals (Out of Scope)
 
 [Clearly state what this migration will NOT include.]
@@ -391,29 +363,10 @@ Common non-goals to consider:
 - Decommissioning the Jenkins instance (separate effort)
 - Changing branching strategy
 - Migrating Jenkins job configuration history or build logs
-
-## Cutover Strategy
-
-### Parallel Run Period
-
-[Duration, success criteria for ending parallel run, how discrepancies will be handled.]
-
-### Validation Criteria
-
-- [ ] All stages produce equivalent results
-- [ ] Artifact outputs match
-- [ ] Deployment targets receive identical artifacts
-- [ ] Notification channels receive equivalent alerts
-- [ ] Build times are within acceptable range
-- [ ] All environment-specific deployments validated
-
-### Rollback Plan
-
-[Specific steps to revert to Jenkins. Decision criteria for triggering rollback.]
-
-### Communication Plan
-
-[Who needs to be informed, at what stages, through what channels.]
+- Secrets migration (inventoried, but configured post-migration)
+- Composite action creation (recommended in post-migration document)
+- Jenkins cutover or decommissioning (separate effort)
+- Parallel run comparison with Jenkins
 
 ## Security Considerations
 
@@ -426,11 +379,10 @@ Common non-goals to consider:
 
 ## Success Metrics
 
-1. **Functional parity**: All Jenkins stages have equivalent GHA jobs producing same results
-2. **Build time**: GHA build time within [X]% of Jenkins build time
-3. **Reliability**: GHA workflow success rate matches or exceeds Jenkins
-4. **Security**: All secrets migrated with appropriate scoping; OIDC where applicable
-5. **Cutover**: Parallel run period completed with zero discrepancies
+1. **Functional representation**: All Jenkins stages have equivalent GHA jobs that represent the same pipeline logic
+2. **Best practices compliance**: All workflows follow CI/CD best practices (permissions, pinning, concurrency, timeouts)
+3. **Complete inventory**: All secrets, integrations, and deferred items documented for post-migration
+4. **Clean validation**: Workflow YAML passes actionlint with no errors
 
 ## Open Questions
 
@@ -442,9 +394,9 @@ Common non-goals to consider:
 After generating the migration spec, ask the user:
 
 1. "Does the platform delta analysis cover all Jenkins behaviors in your pipeline?"
-2. "Is the secrets migration strategy appropriate for your security requirements?"
-3. "Is the cutover strategy realistic given your team's capacity and risk tolerance?"
-4. "Are the demoable units sized appropriately for incremental validation?"
+2. "Is the output strategy (workflow vs reusable workflow) appropriate for your source type?"
+3. "Are there any existing composite actions or reusable workflows I should reference?"
+4. "Are there any items in the post-migration inventory that should be handled differently?"
 
 Iterate based on feedback until satisfied.
 
@@ -462,9 +414,8 @@ Iterate based on feedback until satisfied.
 - Start implementing the migration — only create the specification document
 - Recommend unpinned third-party actions (always require full SHA pinning)
 - Skip the platform delta analysis
-- Omit the secrets migration strategy
+- Omit the secrets inventory
 - Omit the risk assessment
-- Omit the cutover strategy with rollback plan
 - Skip the clarifying questions phase
 - Recommend storing long-lived cloud credentials when OIDC is available
 - Create specs that are too large without addressing scope issues
@@ -474,11 +425,9 @@ Iterate based on feedback until satisfied.
 - Reference the discovery report as the factual basis
 - Ask clarifying questions before generating the spec
 - Include a complete platform delta analysis mapping all Jenkins concepts to GHA equivalents
-- Include secrets migration strategy with OIDC-first recommendations
+- Include secrets inventory with post-migration framing
 - Include CI/CD best practices in the target architecture
 - Include risk assessment with mitigation strategies
-- Include cutover strategy with rollback plan
-- Include proof artifacts for each demoable unit
 - Enforce action pinning to full commit SHAs in all examples
 
 ## What Comes Next
