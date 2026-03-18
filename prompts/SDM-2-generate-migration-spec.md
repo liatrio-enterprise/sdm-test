@@ -309,7 +309,7 @@ Map every Jenkins concept used in this pipeline to its GHA equivalent:
 
 ### OIDC Recommendation
 
-For cloud provider access (AWS, Azure, GCP), OIDC federation is recommended over long-lived access keys. Configuration details will be included in the post-migration document.
+For cloud provider access (AWS, Azure, GCP), OIDC federation is recommended over long-lived access keys. Configuration details will be included in the post-migration GitHub issues.
 
 ## Output Strategy
 
@@ -331,7 +331,7 @@ For cloud provider access (AWS, Azure, GCP), OIDC federation is recommended over
 
 > **Existing reusable components:** Before generating the migration plan, ask the user: "Do you have any existing GitHub Actions composite actions or reusable workflows that this pipeline should use? If so, please provide the paths or repository references so I can incorporate them."
 
-> **Composite actions** are not created as part of this workflow. If repeated patterns are identified that would benefit from composite actions, they will be documented as recommendations in the post-migration document.
+> **Composite actions** are not created as part of this workflow. If repeated patterns are identified that would benefit from composite actions, they will be filed as GitHub issues to the repo.
 
 ## Risk Assessment
 
@@ -363,9 +363,8 @@ Common non-goals to consider:
 - Decommissioning the Jenkins instance (separate effort)
 - Changing branching strategy
 - Migrating Jenkins job configuration history or build logs
-- Secrets migration (inventoried, but configured post-migration)
-- Composite action creation (recommended in post-migration document)
-- Jenkins cutover or decommissioning (separate effort)
+- Secrets migration (inventoried, but filed as GitHub issues for post-migration configuration)
+- Composite action creation (filed as GitHub issues for post-migration)
 - Parallel run comparison with Jenkins
 
 ## Security Considerations
@@ -381,7 +380,7 @@ Common non-goals to consider:
 
 1. **Functional representation**: All Jenkins stages have equivalent GHA jobs that represent the same pipeline logic
 2. **Best practices compliance**: All workflows follow CI/CD best practices (permissions, pinning, concurrency, timeouts)
-3. **Complete inventory**: All secrets, integrations, and deferred items documented for post-migration
+3. **Complete inventory**: All secrets, integrations, and deferred items filed as GitHub issues for post-migration
 4. **Clean validation**: Workflow YAML passes actionlint with no errors
 
 ## Open Questions
@@ -396,7 +395,7 @@ After generating the migration spec, ask the user:
 1. "Does the platform delta analysis cover all Jenkins behaviors in your pipeline?"
 2. "Is the output strategy (workflow vs reusable workflow) appropriate for your source type?"
 3. "Are there any existing composite actions or reusable workflows I should reference?"
-4. "Are there any items in the post-migration inventory that should be handled differently?"
+4. "Are there any items in the post-migration inventory that should be handled differently? (These will be filed as GitHub issues.)"
 
 Iterate based on feedback until satisfied.
 
@@ -425,7 +424,7 @@ Iterate based on feedback until satisfied.
 - Reference the discovery report as the factual basis
 - Ask clarifying questions before generating the spec
 - Include a complete platform delta analysis mapping all Jenkins concepts to GHA equivalents
-- Include secrets inventory with post-migration framing
+- Include secrets inventory with post-migration framing (deferred items will be filed as GitHub issues)
 - Include CI/CD best practices in the target architecture
 - Include risk assessment with mitigation strategies
 - Enforce action pinning to full commit SHAs in all examples

@@ -1,6 +1,6 @@
 ---
 name: SDM-5-validate-migration
-description: "Validate migration completeness with parity testing, best practices audit, and post-migration document review"
+description: "Validate migration completeness with parity testing, best practices audit, and post-migration issue review"
 tags:
   - validation
   - verification
@@ -24,7 +24,7 @@ The marker for this instruction is:  SDM5️⃣
 
 ## You are here in the workflow
 
-You have completed the **migration execution** phase and are now entering **validation**. This is where you verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all best practices are followed, and the post-migration document captures all deferred items.
+You have completed the **migration execution** phase and are now entering **validation**. This is where you verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all best practices are followed, and the post-migration GitHub issues capture all deferred items.
 
 ### Workflow Integration
 
@@ -33,20 +33,20 @@ This validation phase serves as the **quality gate** for the migration:
 **Value Chain Flow:**
 
 - **Implementation → Validation**: Transforms working GHA workflows into verified migration
-- **Validation → Report**: Creates evidence of migration parity and post-migration readiness
+- **Validation → Report**: Creates evidence of migration parity and verifies post-migration issues are filed
 
 **Critical Dependencies:**
 
 - **Migration Spec** serves as the acceptance criteria for functional parity
 - **Proof Artifacts** from SDM-4 provide the evidence base for validation
 - **Platform Delta Analysis** defines what "equivalent" means for each Jenkins concept
-- **Post-Migration Document** captures all deferred items for follow-up
+- **Post-Migration GitHub Issues** capture all deferred items for follow-up
 
 **What Breaks the Chain:**
 
 - Missing proof artifacts → parity cannot be verified
 - Incomplete platform delta coverage → migrated behaviors may be missing
-- Missing post-migration document → deferred items lost
+- Missing post-migration GitHub issues → deferred items lost
 
 ## Your Role
 
@@ -54,7 +54,7 @@ You are a **Senior Quality Assurance Engineer and Migration Verification Special
 
 ## Goal
 
-Validate that the GitHub Actions migration is complete, functionally equivalent to the Jenkins pipeline, and follows best practices. Produce a single, human-readable Markdown report with an evidence-based parity matrix and clear PASS/FAIL gates. Verify the post-migration document captures all deferred items.
+Validate that the GitHub Actions migration is complete, functionally equivalent to the Jenkins pipeline, and follows best practices. Produce a single, human-readable Markdown report with an evidence-based parity matrix and clear PASS/FAIL gates. Verify that post-migration GitHub issues have been filed for all deferred items.
 
 ## Context
 
@@ -80,7 +80,7 @@ All gates must pass for the migration to be approved:
 - **GATE A — Parity**: GHA workflows produce equivalent artifacts, test results, and deployments as Jenkins for every migrated stage
 - **GATE B — Best Practices**: Every workflow has a `permissions:` block with minimum scopes. All third-party actions are pinned to full SHA. Concurrency groups and timeouts are configured
 - **GATE C — Coverage**: Every Jenkins pipeline stage has a corresponding GHA job/step. Every platform delta from the spec is resolved
-- **GATE D — Post-Migration Document**: The post-migration document exists and comprehensively covers all deferred items (secrets to configure, composite actions to create, integrations to wire up, triggers to activate, environment protection rules)
+- **GATE D — Post-Migration Issues**: GitHub issues have been filed to the repo covering all deferred items (secrets to configure, composite actions to create, integrations to wire up, triggers to activate, environment protection rules). Use `gh issue list --label post-migration` to verify.
 
 ## Evaluation Rubric (score each 0–3)
 
@@ -90,7 +90,7 @@ Map score to severity: 0→CRITICAL, 1→HIGH, 2→MEDIUM, 3→OK.
 - **R2 CI/CD Practices**: Workflows follow all best practices specified in the migration spec
 - **R3 Proof Quality**: Proof artifacts contain meaningful evidence of parity, not just "workflow ran"
 - **R4 Git Traceability**: Commits map to migration tasks with clear progression
-- **R5 Post-Migration Documentation**: Post-migration document is comprehensive and actionable
+- **R5 Post-Migration Issues**: Post-migration GitHub issues are comprehensive and actionable
 
 ## Validation Process
 
@@ -132,9 +132,9 @@ Cross-reference:
 3. **Platform deltas** → all are resolved (check the spec's completeness checklist)
 4. **Shared libraries** → all functions have reusable workflow or inline replacements, and reusable workflows are in the location specified by the migration spec's Output Strategy
 
-### Step 5 — Post-Migration Document Review
+### Step 5 — Post-Migration Issue Review
 
-Verify that `[NN]-post-migration-[pipeline-name].md` exists and contains:
+Use `gh issue list --label post-migration` to verify that GitHub issues have been filed covering:
 
 1. **Secrets to Configure** — All credentials from the discovery report are listed with names, types, scopes, and workflow references
 2. **CLI-to-Action Replacements** — Shell commands that should be replaced with official vendor-provided actions (e.g., `az login` → `Azure/login`), each pinned to a full commit SHA
@@ -143,13 +143,15 @@ Verify that `[NN]-post-migration-[pipeline-name].md` exists and contains:
 5. **Triggers to Activate** — The commented-out trigger block with instructions for uncommenting
 6. **Environment Protection Rules** — GitHub Environment configuration needed
 
+Only categories with actual items should have corresponding issues. Empty categories do not need issues.
+
 ## Output (single Markdown report)
 
 ### 1) Executive Summary
 
 - **Overall**: PASS / FAIL (list gates tripped)
 - **Migration Complete**: Yes / No with one-sentence rationale
-- **Key Metrics**: % Stages Migrated, % Best Practices Compliant, Post-Migration Doc Complete
+- **Key Metrics**: % Stages Migrated, % Best Practices Compliant, Post-Migration Issues Filed
 
 ### 2) Parity Matrix (required)
 
@@ -171,16 +173,16 @@ Verify that `[NN]-post-migration-[pipeline-name].md` exists and contains:
 |---|---|---|---|---|---|---|
 | [file] | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌/N/A | Pass/Fail |
 
-### 4) Post-Migration Document Review
+### 4) Post-Migration Issue Review
 
-| Section | Present | Complete | Notes |
-|---|---|---|---|
-| Secrets to Configure | ✅/❌ | ✅/❌ | [notes] |
-| CLI-to-Action Replacements | ✅/❌ | ✅/❌ | [verify all actions SHA-pinned] |
-| Composite Actions to Create | ✅/❌ | ✅/❌ | [notes] |
-| Integrations to Wire Up | ✅/❌ | ✅/❌ | [notes] |
-| Triggers to Activate | ✅/❌ | ✅/❌ | [notes] |
-| Environment Protection Rules | ✅/❌ | ✅/❌ | [notes] |
+| Category | Issue Filed | Complete | Issue Link | Notes |
+|---|---|---|---|---|
+| Secrets to Configure | ✅/❌/N/A | ✅/❌ | [link] | [notes] |
+| CLI-to-Action Replacements | ✅/❌/N/A | ✅/❌ | [link] | [verify all actions SHA-pinned] |
+| Composite Actions to Create | ✅/❌/N/A | ✅/❌ | [link] | [notes] |
+| Integrations to Wire Up | ✅/❌/N/A | ✅/❌ | [link] | [notes] |
+| Triggers to Activate | ✅/❌/N/A | ✅/❌ | [link] | [notes] |
+| Environment Protection Rules | ✅/❌/N/A | ✅/❌ | [link] | [notes] |
 
 ### 5) Validation Issues
 
@@ -211,14 +213,14 @@ For each issue:
 - Jenkins stage with no GHA equivalent and no justification
 - Proof artifacts missing for parent tasks
 - `pull_request_target` with fork checkout in privileged context
-- Missing post-migration document
-- Post-migration document missing secrets inventory
+- Missing post-migration GitHub issues
+- Post-migration issues missing secrets inventory
 
 ## What Comes Next
 
 Once validation passes all gates:
 
-- **All PASS**: "Core migration complete. The post-migration document (`[NN]-post-migration-[pipeline-name].md`) contains all remaining items: secrets to configure, composite actions to create, integrations to wire up, and triggers to activate."
+- **All PASS**: "Core migration complete. Post-migration GitHub issues have been filed for all remaining items: secrets to configure, composite actions to create, integrations to wire up, and triggers to activate."
 - **Any FAIL**: "Migration has [N] blocking issues. Resolve the issues listed above, re-run affected tasks from `/SDM-4-execute-migration`, and re-validate with `/SDM-5-validate-migration`."
 
 ---

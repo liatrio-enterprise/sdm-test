@@ -88,7 +88,7 @@ During **Phase 2** (parent task generation), after presenting the task list for 
 >
 > Would you like the workflow to trigger automatically (e.g., on push/PR to main)? [Yes / No (default)]
 
-- **If No (default):** Keep all triggers commented out; include only `workflow_dispatch`. Trigger activation will be documented in the post-migration document.
+- **If No (default):** Keep all triggers commented out; include only `workflow_dispatch`. Trigger activation will be filed as a GitHub issue.
 - **If Yes:** Generate triggers as normal (matching the Jenkins pipeline's trigger behavior). Note the user's choice in the task list header.
 
 ## Output Type Rule
@@ -110,20 +110,20 @@ Tasks MUST follow this progression. This ordering is not a suggestion — it ref
 
 1. **Foundation** — Workflow file scaffolding, runner configuration, basic triggers, `permissions:` blocks
 2. **Core Pipeline** — All build, test, package, and deploy stages migrated with full logic
-3. **Post-Migration Notes** — Document secrets to configure, composite actions to create, integrations to wire up, and triggers to activate
+3. **Post-Migration Issues** — File GitHub issues for secrets to configure, composite actions to create, integrations to wire up, and triggers to activate
 
 **Why this order:**
 
 - Foundation must exist before anything else can run
 - Core pipeline logic is the primary deliverable — get the workflow right first
-- Post-migration notes capture everything that needs separate handling after the workflow is in place
+- Post-migration issues capture everything that needs separate handling after the workflow is in place
 
 ## Spec-to-Task Mapping
 
 Before generating tasks, verify complete coverage:
 
 1. **Trace each Jenkins stage** to one or more migration tasks
-2. **Verify all plugin dependencies** have corresponding GHA equivalents or are noted as post-migration items
+2. **Verify all plugin dependencies** have corresponding GHA equivalents or are filed as post-migration GitHub issues
 3. **Map every platform delta** to a specific implementation task
 4. **Ensure risk mitigations** from the risk assessment are embedded in relevant tasks
 5. **Verify CI/CD best practices** from the spec are enforced in task requirements
@@ -184,7 +184,7 @@ After explicit user confirmation:
 
 ## Migration Task Ordering
 
-Tasks follow migration-safe ordering: Foundation → Core Pipeline → Post-Migration Notes
+Tasks follow migration-safe ordering: Foundation → Core Pipeline → Post-Migration Issues
 
 ## Tasks
 
@@ -213,11 +213,11 @@ TBD
 
 TBD
 
-### [ ] 3.0 Generate Post-Migration Document
+### [ ] 3.0 File Post-Migration GitHub Issues
 
 #### 3.0 Proof Artifact(s)
 
-- Diff: Post-migration document exists with all deferred items documented
+- GitHub Issues: All deferred items filed as issues to the repo
 
 #### 3.0 Tasks
 
@@ -274,26 +274,26 @@ TBD
 - [ ] 2.5 Add caching for dependencies where applicable
 - [ ] 2.6 Validate full pipeline end-to-end
 
-### [ ] 3.0 Generate Post-Migration Document
+### [ ] 3.0 File Post-Migration GitHub Issues
 
 #### 3.0 Proof Artifact(s)
 
-- Diff: Post-migration document exists with all deferred items
+- GitHub Issues: All deferred items filed as issues to the repo with appropriate labels
 
 #### 3.0 Tasks
 
-- [ ] 3.1 Document secrets inventory — names, types, scopes, workflow references, OIDC recommendations
-- [ ] 3.2 Document recommended composite actions — repeated patterns, expected inputs/outputs
-- [ ] 3.3 Document integration wiring — external services, notification channels, deployment targets
-- [ ] 3.4 Document trigger activation steps — the commented-out trigger block and instructions for uncommenting
-- [ ] 3.5 Document environment protection rules — GitHub Environment configuration needed
+- [ ] 3.1 File issue: Configure secrets — names, types, scopes, workflow references, OIDC recommendations
+- [ ] 3.2 File issue: Create recommended composite actions — repeated patterns, expected inputs/outputs
+- [ ] 3.3 File issue: Wire up integrations — external services, notification channels, deployment targets
+- [ ] 3.4 File issue: Activate triggers — the commented-out trigger block and instructions for uncommenting
+- [ ] 3.5 File issue: Configure environment protection rules — GitHub Environment configuration needed
 ```
 
 ## Quality Checklist
 
 Before finalizing, verify:
 
-- [ ] Tasks follow migration-safe ordering (Foundation → Core Pipeline → Post-Migration Notes)
+- [ ] Tasks follow migration-safe ordering (Foundation → Core Pipeline → Post-Migration Issues)
 - [ ] All Jenkins stages are covered by at least one task
 - [ ] All plugin dependencies have corresponding migration steps
 - [ ] All platform deltas from the spec are addressed
@@ -301,7 +301,7 @@ Before finalizing, verify:
 - [ ] All action references use full SHA pinning
 - [ ] CI/CD best practices from the spec are reflected in task requirements
 - [ ] Sub-tasks are actionable and unambiguous
-- [ ] Post-migration document task covers all deferred items (secrets, composite actions, integrations, triggers)
+- [ ] Post-migration issues cover all deferred items (secrets, composite actions, integrations, triggers)
 
 ## What Comes Next
 

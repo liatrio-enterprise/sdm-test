@@ -188,42 +188,39 @@ For every workflow file written, verify:
 - [ ] `actions/cache` used for dependency caching where applicable
 - [ ] Environment protection rules configured for deployment jobs
 
-### Post-Migration Document Generation
+### Post-Migration GitHub Issue Creation
 
-After all core tasks complete, generate a post-migration document at:
-`./docs/specs/[NN]-migration-[pipeline-name]/[NN]-post-migration-[pipeline-name].md`
+After all core tasks complete, file GitHub issues to the repo for each category of deferred post-migration work. Use `gh issue create` to create each issue. All issues should be labeled with `post-migration` and the migration name.
 
-The document must contain the following sections:
-
-**Secrets to Configure:**
+**Issue 1 — Configure Secrets:**
 Table of secret names, types, scopes, and where they're referenced in the workflow. Include OIDC recommendations where applicable.
 
 | Secret Name | Type | Recommended Scope | Workflow Reference | Notes |
 |---|---|---|---|---|
 | [name] | [usernamePassword/string/sshKey] | [repo/org/environment] | [workflow file:line] | [OIDC recommended, etc.] |
 
-**Composite Actions to Create:**
+**Issue 2 — Create Composite Actions:**
 Recommended composite actions based on repeated patterns or shared library functions that were inlined during migration. All action references must be pinned to full commit SHAs.
 
 | Recommended Action | Purpose | Expected Inputs | Expected Outputs | Priority |
 |---|---|---|---|---|
 | [name] | [what it would encapsulate] | [inputs] | [outputs] | [High/Medium/Low] |
 
-**CLI-to-Action Replacements:**
+**Issue 3 — CLI-to-Action Replacements:**
 Shell commands that should be replaced with official vendor-provided GitHub Actions. These actions handle authentication, error handling, and output parsing natively and are preferred over raw CLI usage. All recommended actions must be pinned to full commit SHAs.
 
 | Current CLI Usage | Recommended Action | SHA-Pinned Reference | Rationale |
 |---|---|---|---|
 | [e.g., `az login`] | [e.g., `Azure/login`] | [e.g., `Azure/login@abc123...`] | [native OIDC support, error handling] |
 
-**Integrations to Wire Up:**
+**Issue 4 — Wire Up Integrations:**
 External services, notification channels, and deployment targets that need manual configuration.
 
 | Integration | Type | Configuration Needed | Workflow Reference |
 |---|---|---|---|
 | [service] | [notification/deployment/artifact] | [what to configure] | [workflow file:line] |
 
-**Triggers to Activate:**
+**Issue 5 — Activate Triggers:**
 The commented-out trigger block and instructions for uncommenting when ready.
 
 ```yaml
@@ -235,8 +232,12 @@ The commented-out trigger block and instructions for uncommenting when ready.
 #     branches: [main]
 ```
 
-**Environment Protection Rules:**
+**Issue 6 — Configure Environment Protection Rules:**
 Any GitHub Environment configuration needed (required reviewers, deployment branches, wait timers).
+
+> **Note:** Only create issues for categories that have actual items to address. Skip empty categories. Each issue body should use Markdown tables and be self-contained with enough context to act on independently.
+
+> **Important:** After creating each issue, display the issue URL to the user so they can easily follow up. After all issues are created, present a summary list of all filed issues with their titles and links.
 
 | Environment | Protection Rules | Deployment Branch | Required Reviewers |
 |---|---|---|---|
@@ -319,10 +320,10 @@ Migration execution is successful when:
 - Git commits follow conventional format with migration references
 - All workflow YAML validates with actionlint
 - CI/CD best practices enforced in all workflow files
-- Post-migration document generated with all deferred items
+- Post-migration GitHub issues filed for all deferred items
 - No real credentials in any committed file
 - Task file accurately reflects final status
 
 ## What Comes Next
 
-After completing all tasks, instruct the user to run `/SDM-5-validate-migration` to verify the core pipeline output is accurate and the post-migration document is comprehensive.
+After completing all tasks, instruct the user to run `/SDM-5-validate-migration` to verify the core pipeline output is accurate and the post-migration GitHub issues are comprehensive.

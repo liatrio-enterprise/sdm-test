@@ -130,9 +130,41 @@ For each Jenkinsfile found, classify:
 | **Parameters** | List all `parameters {}` block entries with types and defaults |
 | **Stage Count** | Number of pipeline stages |
 | **Parallel Stages** | Yes/No — list parallel stage groups |
+| **Matrix Build Candidates** | Yes/No — see Matrix Build Opportunity Analysis below |
 | **Conditional Logic** | `when` blocks, `if/else` (scripted), branch-based filtering |
 | **Post-Conditions** | `post { always/success/failure/unstable/cleanup }` actions |
 | **Timeout/Retry** | Any `timeout` or `retry` configurations |
+
+### Matrix Build Opportunity Analysis
+
+After classifying each pipeline, analyze it for **GitHub Actions matrix build opportunities**. Jenkins pipelines often implement multi-version, multi-platform, or multi-environment builds using patterns that map directly to `strategy.matrix` in GitHub Actions.
+
+**Detection patterns — look for any of the following:**
+
+| Jenkins Pattern | Example Syntax | Matrix Opportunity |
+|---|---|---|
+| Parallel stages with identical structure | `parallel { stage('Node 16') { ... } stage('Node 18') { ... } }` | `matrix: { node-version: [16, 18] }` |
+| Loop-generated stages | `for (version in versions) { stage("Build ${version}") { ... } }` | Matrix with version dimension |
+| Parameterized multi-value builds | `choice(choices: ['dev', 'staging', 'prod'])` with same logic per choice | Matrix with environment dimension |
+| Multi-platform builds | Separate stages for `linux`, `windows`, `macos` agents | `matrix: { os: [ubuntu-latest, windows-latest, macos-latest] }` |
+| Multi-architecture builds | Docker buildx or separate stages for `amd64`, `arm64` | Matrix with architecture dimension |
+| Repeated stages differing only by a variable | Stages like `Test-Java11`, `Test-Java17` with same steps | Matrix with the varying variable as dimension |
+| Scripted `Map` iteration | `def configs = ['api': [...], 'web': [...]]` iterated in parallel | Matrix with component dimension |
+
+**For each matrix candidate found, record:**
+
+| Candidate | Jenkins Implementation | Suggested Matrix Dimensions | Estimated Combinations | Notes |
+|---|---|---|---|---|
+| [description] | [parallel stages / loop / parameter] | [e.g., `node-version: [16, 18, 20]`] | [count] | [fail-fast behavior, exclude combos, etc.] |
+
+**Also assess:**
+
+- **Fail-fast behavior**: Does the Jenkins pipeline stop all parallel branches on first failure? Map to `fail-fast: true/false`
+- **Excludes**: Are there combinations that should be skipped? Map to `matrix.exclude`
+- **Includes**: Are there one-off combinations with additional variables? Map to `matrix.include`
+- **Max parallel**: Does Jenkins limit concurrent parallel branches? Map to `max-parallel:`
+
+**If no matrix candidates are found**, explicitly state: "No matrix build opportunities identified — pipeline stages are sequential or structurally unique."
 
 ## Step 3: Plugin Inventory
 
@@ -284,7 +316,7 @@ Scan all `sh` / `bat` steps for CLI tool usage where a major platform vendor pro
 | `slack` webhook/API calls | `slackapi/slack-github-action` | Slack |
 | `sonar-scanner` | `sonarsource/sonarqube-scan-action` | SonarSource |
 
-Record any CLI-to-action opportunities found. These will be included in the post-migration document as recommended action replacements, with each action pinned to a full commit SHA.
+Record any CLI-to-action opportunities found. These will be filed as GitHub issues to the repo as recommended action replacements, with each action pinned to a full commit SHA.
 
 ## Step 8: Scope Assessment
 
@@ -330,6 +362,9 @@ Evaluate whether this migration request is appropriately sized.
 
 ## Pipeline Inventory
 [Table of all Jenkinsfiles found with classification]
+
+## Matrix Build Opportunities
+[Table of matrix candidates with Jenkins pattern, suggested dimensions, and combination counts — or explicit statement that none were found]
 
 ## Plugin Dependency Matrix
 [Table of all plugins detected with purpose and usage count]
