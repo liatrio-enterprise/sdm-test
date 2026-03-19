@@ -119,7 +119,8 @@ For every `.github/workflows/*.yml` file:
 3. `concurrency:` group configured with appropriate `cancel-in-progress` setting
 4. `timeout-minutes:` set on every job
 5. `actions/cache` used for dependency management where applicable
-6. No `pull_request_target` with fork code checkout in privileged context
+6. YAML anchors (`&`) and aliases (`*`) used where env blocks or job configurations are repeated across jobs
+7. No `pull_request_target` with fork code checkout in privileged context
 7. No secrets hardcoded in YAML or logs
 8. Application workflows live in the application repo's `.github/workflows/`; reusable workflows live in the repository specified by the migration spec's Output Strategy
 

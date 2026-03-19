@@ -185,6 +185,7 @@ For every workflow file written, verify:
 - [ ] `timeout-minutes:` set on every job
 - [ ] No secrets hardcoded in YAML
 - [ ] Environment variables scoped correctly: job-only vars under `jobs.<id>.env:`, multi-job vars under workflow-level `env:`
+- [ ] YAML anchors (`&`) and aliases (`*`) used to eliminate duplication where env blocks or job configurations are shared across jobs
 - [ ] `actions/cache` used for dependency caching where applicable
 - [ ] Environment protection rules configured for deployment jobs
 

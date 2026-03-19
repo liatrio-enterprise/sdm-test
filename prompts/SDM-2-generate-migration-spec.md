@@ -210,6 +210,7 @@ The migration spec MUST incorporate these best practices in the target architect
 - **Caching**: Use `actions/cache` for package manager dependencies (npm, pip, maven, gradle). Define cache keys based on lockfile hashes
 - **Concurrency groups**: Use `concurrency:` to prevent duplicate workflow runs. Set `cancel-in-progress: true` for PR workflows
 - **Matrix builds**: Use `strategy.matrix` for multi-version or multi-platform testing instead of duplicating jobs
+- **YAML anchors and aliases**: Use YAML anchors (`&`) to define reusable content and aliases (`*`) to reference it elsewhere in the workflow. Use anchors to share environment variable blocks across jobs (`env: &env_vars` / `env: *env_vars`) and to reuse entire job configurations (`&base_job` / `*base_job`). This reduces duplication and keeps workflows maintainable. See: [GitHub Docs — YAML anchors and aliases](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations#yaml-anchors-and-aliases)
 - **Reusable workflows**: Extract shared logic into reusable workflows (`.github/workflows/reusable-*.yml`) called with `workflow_call`
 - **Composite actions**: Create repo-local composite actions in `.github/actions/[name]/action.yml` for repeated step sequences
 
