@@ -1,6 +1,6 @@
 ---
 name: SDM-1-discovery-assessment
-description: "Audit existing Jenkins pipelines, plugins, credentials, and infrastructure for GitHub Actions migration"
+description: "Audit existing Jenkins pipelines (Jenkinsfile), plugins, credentials, shared libraries, and infrastructure for GitHub Actions migration. Use when the user has a Jenkinsfile or Jenkins pipeline they want to migrate to GitHub Actions and needs a discovery assessment first."
 tags:
   - migration
   - assessment
@@ -24,41 +24,23 @@ The marker for this instruction is:  SDM1️⃣
 
 ## You are here in the workflow
 
-We are at the **beginning** of the Spec-Driven Migration Workflow. This is where we audit the existing Jenkins estate to build a complete inventory before any migration planning begins. You cannot write a migration spec without first understanding what exists.
+This is **Step 1** of the Spec-Driven Migration Workflow. The discovery report you produce here becomes the factual foundation for the entire migration — the spec, tasks, implementation, and validation all trace back to this inventory. If something is missed here, it will be missed downstream.
 
-### Workflow Integration
+**Key outputs and who consumes them:**
 
-This discovery phase serves as the **foundation** for the entire SDM workflow:
-
-**Value Chain Flow:**
-
-- **Jenkins Estate → Discovery**: Audits existing pipelines, plugins, credentials, and infrastructure
-- **Discovery → Migration Spec**: Provides the factual basis for migration planning
-- **Migration Spec → Tasks**: Enables accurate task breakdown with known risks
-- **Tasks → Implementation**: Guides structured migration execution
-
-**Critical Dependencies:**
-
-- **Pipeline Inventory** becomes the scope boundary for the migration spec
-- **Plugin Dependency Matrix** drives GHA equivalent selection in spec generation
-- **Credentials Catalog** informs the secrets migration strategy
-- **Agent/Runner Mapping** determines infrastructure requirements
-- **Shared Library Catalog** guides reusable workflow/composite action decisions
-- **Risk Assessment** prioritizes migration ordering
-
-**What Breaks the Chain:**
-
-- Incomplete pipeline discovery → missed functionality in migration
-- Missing plugin inventory → broken builds after migration
-- Undocumented credentials → authentication failures in GHA
-- Unknown shared library dependencies → incomplete migration scope
-- Skipped integration point analysis → broken external connections post-migration
+- **Pipeline Inventory** → scopes the migration spec (SDM-2)
+- **Plugin Dependency Matrix** → drives GHA equivalent selection (SDM-2)
+- **Credentials Catalog** → informs secrets strategy (SDM-2, post-migration issues)
+- **Agent/Runner Mapping** → determines infrastructure requirements (SDM-2)
+- **Shared Library Catalog** → guides reusable workflow decisions (SDM-2, SDM-3)
 
 ### Output Type Rule
 
-- If the source is a **Jenkinsfile** (application pipeline) that does **not** call shared libraries, the output is a **GitHub Actions workflow** placed in the application repository's `.github/workflows/<name>.yml`
-- If the source is a **Jenkinsfile** that **calls shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** (`.github/workflows/reusable-<name>.yml`) invoked via `workflow_call`. The application workflow calls this reusable workflow. **You must ask the user where the reusable workflow should live** — it may belong in the application repo, a dedicated shared-workflows repo, or an organization-level repo, depending on how many teams consume the library
-- If the source is a **standalone shared library** (`vars/*.groovy`, `src/**/*.groovy`) being migrated independently, the output is a **reusable workflow** and the user must be prompted for the target repository
+The migration output type depends on the source — classify early so the discovery report frames the right migration strategy:
+
+- **Jenkinsfile without shared libraries** → GitHub Actions workflow (`.github/workflows/<name>.yml`)
+- **Jenkinsfile calling shared libraries** (`@Library`) → Application workflow + reusable workflow(s) via `workflow_call`. Ask the user where the reusable workflow should live (app repo, shared-workflows repo, or org-level repo)
+- **Standalone shared library** (`vars/*.groovy`) → Reusable workflow; prompt for target repository
 
 ## Your Role
 
@@ -310,7 +292,9 @@ Scan all `sh` / `bat` steps for CLI tool usage where a major platform vendor pro
 | `kubectl apply`, `helm upgrade` | `Azure/k8s-deploy`, `azure/k8s-set-context` | Microsoft |
 | `terraform init/plan/apply` | `hashicorp/setup-terraform` | HashiCorp |
 | `node/npm/yarn` setup | `actions/setup-node` | GitHub |
-| `java/maven/gradle` setup | `actions/setup-java` | GitHub |
+| `java/maven/gradle` setup | `actions/setup-java` (with `cache: maven` or `cache: gradle`) | GitHub |
+| `./gradlew` build/test | `gradle/actions/setup-gradle` + `run: ./gradlew build` | Gradle |
+| `mvn spring-boot:build-image` / `./gradlew bootBuildImage` | Native Spring Boot buildpack (no action needed, runs as `run:` step) | Spring |
 | `python/pip` setup | `actions/setup-python` | GitHub |
 | `go` setup | `actions/setup-go` | GitHub |
 | `slack` webhook/API calls | `slackapi/slack-github-action` | Slack |
@@ -390,24 +374,19 @@ Evaluate whether this migration request is appropriately sized.
 
 ## Critical Constraints
 
-**NEVER:**
+**Boundaries** — This is a read-only assessment. Do not modify repository files or begin writing the migration spec. If no Jenkinsfile or pipeline reference has been provided, ask the user before proceeding.
 
-- Extract, display, or log actual secret values — only document credential IDs and types
-- Modify any files in the repository — this is a read-only assessment
-- Start writing the migration spec — only create the discovery document
-- Skip the scope assessment
-- Assume plugin functionality without examining Jenkinsfile syntax
-- Proceed without a Jenkinsfile or pipeline reference from the user
+**Secrets safety** — Only document credential IDs and types. Never extract, display, or log actual secret values — this protects the user if the discovery report is committed to the repo.
 
-**ALWAYS:**
+**Completeness requirements** — Every component discovered must appear in the report. Specifically:
+- Every credential reference (by ID only)
+- Every pipeline classified by type, complexity, and trigger
+- Every agent configuration mapped to a GHA runner strategy
+- Every shared library dependency identified
+- A risk assessment for each component
+- A scope assessment presented to the user before generating the report
 
-- Document every credential reference found (by ID only)
-- Include a risk assessment for each discovered component
-- Classify every pipeline by type, complexity, and trigger mechanism
-- Map agent configurations to potential GHA runner strategies
-- Identify all shared library dependencies
-- Report the scope assessment to the user before generating the discovery document
-- Flag any areas where the Jenkinsfile alone is insufficient (e.g., "this pipeline references shared library X — source code needed for full assessment")
+If the Jenkinsfile alone is insufficient (e.g., shared library source not available), flag it explicitly rather than guessing.
 
 ## What Comes Next
 

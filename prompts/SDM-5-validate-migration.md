@@ -1,6 +1,6 @@
 ---
 name: SDM-5-validate-migration
-description: "Validate migration completeness with parity testing, best practices audit, and post-migration issue review"
+description: "Validate Jenkins-to-GitHub Actions migration completeness with parity testing, best practices audit, and post-migration issue review. Use after SDM-4 execution is complete and you need to verify the migration before finalizing."
 tags:
   - validation
   - verification
@@ -24,29 +24,7 @@ The marker for this instruction is:  SDM5️⃣
 
 ## You are here in the workflow
 
-You have completed the **migration execution** phase and are now entering **validation**. This is where you verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all best practices are followed, and the post-migration GitHub issues capture all deferred items.
-
-### Workflow Integration
-
-This validation phase serves as the **quality gate** for the migration:
-
-**Value Chain Flow:**
-
-- **Implementation → Validation**: Transforms working GHA workflows into verified migration
-- **Validation → Report**: Creates evidence of migration parity and verifies post-migration issues are filed
-
-**Critical Dependencies:**
-
-- **Migration Spec** serves as the acceptance criteria for functional parity
-- **Proof Artifacts** from SDM-4 provide the evidence base for validation
-- **Platform Delta Analysis** defines what "equivalent" means for each Jenkins concept
-- **Post-Migration GitHub Issues** capture all deferred items for follow-up
-
-**What Breaks the Chain:**
-
-- Missing proof artifacts → parity cannot be verified
-- Incomplete platform delta coverage → migrated behaviors may be missing
-- Missing post-migration GitHub issues → deferred items lost
+This is **Step 5** — the final quality gate. You verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all best practices are followed, and post-migration GitHub issues capture all deferred items. The migration spec is your acceptance criteria, and the proof artifacts from SDM-4 are your evidence base.
 
 ## Your Role
 
@@ -121,8 +99,16 @@ For every `.github/workflows/*.yml` file:
 5. `actions/cache` used for dependency management where applicable
 6. YAML anchors (`&`) and aliases (`*`) used where env blocks or job configurations are repeated across jobs
 7. No `pull_request_target` with fork code checkout in privileged context
-7. No secrets hardcoded in YAML or logs
-8. Application workflows live in the application repo's `.github/workflows/`; reusable workflows live in the repository specified by the migration spec's Output Strategy
+8. No secrets hardcoded in YAML or logs
+9. Application workflows live in the application repo's `.github/workflows/`; reusable workflows live in the location specified by the migration spec's Output Strategy
+
+**Spring / Java workflows (validate when the pipeline builds a Java/Spring project):**
+
+10. `actions/setup-java@v4` used with `distribution`, `java-version`, and `cache` parameter — not manual `actions/cache` configuration
+11. Maven builds use `--batch-mode --update-snapshots` flags
+12. Gradle builds use `gradle/actions/setup-gradle` (SHA-pinned) — not bare `./gradlew` without the setup action
+13. Container images use Spring Boot buildpacks or `docker/build-push-action` — not raw `docker build` shell commands
+14. Test results published via test reporter action (SHA-pinned) — not just console output
 
 ### Step 4 — Coverage Verification
 

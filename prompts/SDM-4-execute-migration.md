@@ -1,6 +1,6 @@
 ---
 name: SDM-4-execute-migration
-description: "Execute migration tasks with CI/CD-specific checkpoints, actionlint validation, and secret verification gates"
+description: "Execute Jenkins-to-GitHub Actions migration tasks with CI/CD-specific checkpoints, actionlint validation, and secret verification gates. Use after SDM-3 task list is approved and you're ready to implement the migration."
 tags:
   - execution
   - migration
@@ -23,29 +23,7 @@ The marker for this instruction is:  SDM4️⃣
 
 ## You are here in the workflow
 
-You have completed the **task generation** phase and are now entering **migration execution**. This is where you convert Jenkins pipeline configurations into GitHub Actions workflows, following the ordered task list with migration-specific verification at each step.
-
-### Workflow Integration
-
-This execution phase serves as the **implementation engine** for the migration:
-
-**Value Chain Flow:**
-
-- **Tasks → Implementation**: Translates ordered migration plan into working GHA workflows
-- **Implementation → Proof Artifacts**: Creates evidence of migration parity at each step
-- **Proof Artifacts → Validation**: Enables comprehensive parity verification in SDM-5
-
-**Critical Dependencies:**
-
-- **Parent tasks** become implementation checkpoints and commit boundaries
-- **Proof artifacts** demonstrate migration parity and become evidence for `/SDM-5-validate-migration`
-- **Task ordering** ensures foundation is verified before pipeline logic
-
-**What Breaks the Chain:**
-
-- Missing actionlint validation → invalid YAML deployed to repository
-- Incomplete proof artifacts → validation cannot confirm parity
-- Ignoring task ordering → dependencies unsatisfied, cascading failures
+This is **Step 4** — converting Jenkins pipeline configurations into working GitHub Actions workflows by executing the task list from SDM-3. Each parent task produces a commit with proof artifacts that SDM-5 will use for validation. Follow task ordering strictly — foundation before pipeline logic — because each layer depends on the previous one being verified.
 
 ## Your Role
 
@@ -79,85 +57,33 @@ For each parent task, follow this structured workflow:
 
 ### Phase 1: Task Preparation
 
-```markdown
-## PRE-WORK CHECKLIST
+Before starting each parent task:
 
-[ ] Locate task file: `./docs/specs/[NN]-migration-[pipeline-name]/[NN]-tasks-[pipeline-name].md`
-[ ] Read current task status and identify next task
-[ ] Verify checkpoint mode preference
-[ ] Review proof artifacts required for current parent task
-[ ] Review migration spec for relevant platform deltas and best practices
-[ ] Check if current task has dependency on prior task completion
-```
+1. Read the task file at `./docs/specs/[NN]-migration-[pipeline-name]/[NN]-tasks-[pipeline-name].md`
+2. Identify the next incomplete task and its required proof artifacts
+3. Review the migration spec for relevant platform deltas and best practices
+4. Confirm the checkpoint mode preference (see Checkpoint Options above)
 
 ### Phase 2: Sub-Task Execution
 
-```markdown
-## SUB-TASK EXECUTION PROTOCOL
-
 For each sub-task:
 
-1. **Mark In Progress**: Update `[ ]` → `[~]` for current sub-task (and parent task)
-2. **Implement**: Write/modify workflow YAML, composite actions, reusable workflows, or scripts
-3. **Validate YAML**: Run `actionlint` on any modified workflow files (if available)
-4. **Test**: Verify implementation works (syntax check, dry-run if possible)
-5. **Quality Check**: Run pre-commit hooks and linting
-6. **Mark Complete**: Update `[~]` → `[x]` for current sub-task
-7. **Save Task File**: Immediately save changes
-
-**VERIFICATION**: Confirm sub-task is marked `[x]` before proceeding
-```
+1. **Mark in progress** — update `[ ]` → `[~]` for the sub-task and parent task
+2. **Implement** — write/modify workflow YAML, composite actions, reusable workflows, or scripts
+3. **Validate** — run `actionlint` on any modified workflow files (if available); otherwise validate YAML structure manually
+4. **Quality check** — run pre-commit hooks and linting
+5. **Mark complete** — update `[~]` → `[x]` and save the task file immediately
 
 ### Phase 3: Parent Task Completion
 
-```markdown
-## PARENT TASK COMPLETION CHECKLIST
+When all sub-tasks for a parent task are `[x]`:
 
-When all sub-tasks are `[x]`, complete IN ORDER:
+1. **Validate all modified workflow YAML** with `actionlint`
+2. **Create proof artifacts** at `./docs/specs/[NN]-migration-[pipeline-name]/[NN]-proofs/[NN]-task-[TT]-proofs.md` — include GHA run logs, actionlint output, diffs, and any other evidence. Never include real secrets; use `[REDACTED]` placeholders
+3. **Commit** — stage changes and create a conventional commit: `feat: [migration-task-description]` with task references
+4. **Mark parent complete** — update `[~]` → `[x]`
 
-[ ] **Validate Workflow YAML**: Run `actionlint` on all modified `.github/workflows/*.yml` files
-[ ] **Quality Gates**: Run pre-commit hooks and linting
-[ ] **Create Proof Artifacts**: Create proof file in `./docs/specs/[NN]-migration-[pipeline-name]/[NN]-proofs/`
-   - File naming: `[NN]-task-[TT]-proofs.md`
-   - Include all evidence: GHA run logs, actionlint output, secret validation, diffs
-   - Format with markdown code blocks and clear section headers
-   - **Security Check**: Verify no real secrets in proof file
-[ ] **Stage Changes**: `git add .`
-[ ] **Create Commit**:
-    ```bash
-    git commit -m "feat: [migration-task-description]" \
-      -m "- [key-details]" \
-      -m "Related to T[task-number] in Migration [spec-number]"
-    ```
-[ ] **Verify Commit**: `git log --oneline -1`
-[ ] **Mark Parent Complete**: Update `[~]` → `[x]` for parent task
-
-**BLOCKING VERIFICATION**: Before proceeding to next parent task:
-1. Verify proof file exists and contains evidence
-2. Verify git commit is present
-3. Verify parent task is marked `[x]`
-4. Verify workflow YAML passes actionlint (if applicable)
-
-**All four verifications must pass before proceeding**
-```
-
-### Phase 4: Progress Validation
-
-```markdown
-## BEFORE CONTINUING VALIDATION
-
-After each parent task completion:
-
-[ ] Task file shows parent task as `[x]`
-[ ] Proof artifacts exist with proper naming
-[ ] Git commit created with proper format
-[ ] Workflow YAML validates with actionlint (if applicable)
-[ ] Proof artifacts demonstrate migration parity (not just "it runs")
-[ ] No real secrets, tokens, or credentials in proof files
-[ ] Implementation follows CI/CD best practices from migration spec
-
-**If any item fails, fix before proceeding**
-```
+**Gate check before proceeding to next parent task:** proof file exists with evidence, commit is present, parent task is marked `[x]`, and workflow YAML passes actionlint. All four must pass.
 
 ## Migration-Specific Execution Rules
 
@@ -188,6 +114,15 @@ For every workflow file written, verify:
 - [ ] YAML anchors (`&`) and aliases (`*`) used to eliminate duplication where env blocks or job configurations are shared across jobs
 - [ ] `actions/cache` used for dependency caching where applicable
 - [ ] Environment protection rules configured for deployment jobs
+
+**Spring / Java workflows (apply when applicable):**
+
+- [ ] `actions/setup-java@v4` used with explicit `distribution` (prefer `temurin`), `java-version`, and `cache` parameter (`maven` or `gradle`)
+- [ ] Maven builds use `--batch-mode --update-snapshots` flags
+- [ ] Gradle builds use `gradle/actions/setup-gradle` (SHA-pinned) instead of bare `./gradlew`
+- [ ] Maven wrapper (`./mvnw`) used instead of `mvn` when wrapper is present in repo
+- [ ] Container images use Spring Boot buildpacks (`spring-boot:build-image` / `bootBuildImage`) or `docker/build-push-action` — not raw `docker build` shell commands
+- [ ] Test results published via `dorny/test-reporter` or `mikepenz/action-junit-report` (SHA-pinned) from `target/surefire-reports/` or `build/test-results/`
 
 ### Post-Migration GitHub Issue Creation
 

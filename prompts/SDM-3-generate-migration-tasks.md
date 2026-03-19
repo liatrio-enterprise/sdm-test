@@ -1,6 +1,6 @@
 ---
 name: SDM-3-generate-migration-tasks
-description: "Generate an ordered migration task list from a Migration Spec with infrastructure-first sequencing"
+description: "Generate an ordered migration task list from a Jenkins-to-GitHub Actions Migration Spec. Uses infrastructure-first sequencing (foundation → pipeline → post-migration). Use after SDM-2 spec is approved and you need to plan implementation tasks."
 tags:
   - planning
   - tasks
@@ -24,30 +24,12 @@ The marker for this instruction is:  SDM3️⃣
 
 ## You are here in the workflow
 
-You have completed the **migration spec** phase and now need to break down the spec into actionable, ordered migration tasks. This is the critical planning step that bridges the migration specification to implementation.
+This is **Step 3** — breaking the migration spec into ordered, implementable tasks. The task list you produce here is what SDM-4 executes against and SDM-5 validates against. Task ordering matters because CI/CD migrations have real dependency chains (you can't test a pipeline that doesn't have a workflow file yet), and proof artifacts matter because they're the evidence base for validation.
 
-### Workflow Integration
-
-This task list serves as the **execution blueprint** for the migration:
-
-**Value Chain Flow:**
-
-- **Migration Spec → Tasks**: Translates migration requirements into implementable, ordered units
-- **Tasks → Implementation**: Provides structured approach with clear milestones
-- **Implementation → Validation**: Proof artifacts enable verification of migration parity
-
-**Critical Dependencies:**
-
-- **Parent tasks** become implementation checkpoints in `/SDM-4-execute-migration`
-- **Proof artifacts** guide migration verification and become evidence for `/SDM-5-validate-migration`
-- **Task ordering** ensures foundation is in place before pipeline logic
-- **Platform delta resolution** must be tracked per-task to ensure complete coverage
-
-**What Breaks the Chain:**
-
-- Wrong task ordering → dependencies not in place when workflow needs them
-- Missing proof artifacts → cannot confirm functional parity
-- Overly large tasks → loss of incremental progress and validation capability
+**Key relationships:**
+- **Parent tasks** → become implementation checkpoints and commit boundaries in SDM-4
+- **Proof artifacts** → become the evidence base for SDM-5 validation
+- **Task ordering** → wrong order means broken dependencies during execution
 
 ## Your Role
 
@@ -93,9 +75,7 @@ During **Phase 2** (parent task generation), after presenting the task list for 
 
 ## Output Type Rule
 
-- If the source is a **Jenkinsfile** (application pipeline) that does **not** call shared libraries, the output is a **GitHub Actions workflow** placed in the application repository's `.github/workflows/<name>.yml`
-- If the source is a **Jenkinsfile** that **calls shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** invoked via `workflow_call`. The application workflow calls this reusable workflow. The migration spec's "Output Strategy" section specifies where the reusable workflow lives — if not specified, **ask the user** before generating tasks
-- If the source is a **standalone shared library** (`vars/*.groovy`, `src/**/*.groovy`), the output is a **reusable workflow** and the target repository must have been confirmed with the user in SDM-2
+Refer to the migration spec's **Output Strategy** section for the authoritative source-to-output mapping. The key rule: Jenkinsfiles without shared libraries produce a workflow; Jenkinsfiles with shared libraries produce a workflow + reusable workflow(s); standalone shared libraries produce reusable workflows. If the spec doesn't specify where reusable workflows live, **ask the user** before generating tasks.
 
 ## Why Two-Phase Task Generation?
 

@@ -1,6 +1,6 @@
 ---
 name: SDM-2-generate-migration-spec
-description: "Generate a Migration Specification from discovery report with platform deltas, secrets strategy, and CI/CD best practices"
+description: "Generate a Migration Specification from a Jenkins-to-GitHub Actions discovery report. Produces platform delta analysis, secrets strategy, CI/CD best practices, and output strategy. Use after SDM-1 discovery is complete and you need to plan the migration architecture."
 tags:
   - planning
   - specification
@@ -24,30 +24,13 @@ The marker for this instruction is:  SDM2️⃣
 
 ## You are here in the workflow
 
-You have completed the **discovery and assessment** phase and now need to transform that inventory into a detailed migration specification. This is where Jenkins knowledge meets GitHub Actions architecture to produce the single source of truth for the migration.
+This is **Step 2** — transforming the discovery inventory into a migration specification. The spec you produce here is the single source of truth for the rest of the workflow: SDM-3 derives tasks from it, SDM-4 implements against it, and SDM-5 validates parity using it as acceptance criteria.
 
-### Workflow Integration
-
-This migration spec serves as the **planning blueprint** for the entire SDM workflow:
-
-**Value Chain Flow:**
-
-- **Discovery → Migration Spec**: Transforms inventory into structured migration requirements
-- **Migration Spec → Tasks**: Provides foundation for migration task planning
-- **Tasks → Implementation**: Guides structured migration approach
-- **Implementation → Validation**: Spec serves as acceptance criteria for functional parity
-
-**Critical Dependencies:**
-
-- **Platform Delta Analysis** drives migration task breakdown
-- **Secrets Inventory** informs post-migration credential configuration
-- **CI/CD Best Practices** set the quality bar for the target state
-
-**What Breaks the Chain:**
-
-- Incomplete platform delta mapping → missed behavioral differences post-migration
-- Ignoring CI/CD best practices → migrating bad patterns instead of improving them
-- Oversized specs → unmanageable task breakdown
+**What matters most in this spec:**
+- **Platform Delta Analysis** — drives every migration task; gaps here mean gaps in the migration
+- **CI/CD Best Practices** — set the quality bar; without them you're just copying bad patterns
+- **Secrets Inventory** — informs post-migration credential configuration
+- **Appropriate scope** — oversized specs lead to unmanageable task breakdowns
 
 ## Your Role
 
@@ -177,13 +160,18 @@ Use this reference table when mapping Jenkins concepts to GitHub Actions equival
 | `build job: 'downstream'` | `workflow_dispatch` event + API trigger | Less tightly coupled than Jenkins upstream/downstream |
 | `currentBuild.result` | `${{ job.status }}` | `success`, `failure`, `cancelled` |
 | `sh 'command'` / `bat 'command'` | `run: command` | `shell: bash` (default on Linux), `shell: pwsh` on Windows |
-| `junit '**/results.xml'` | `dorny/test-reporter` or `mikepenz/action-junit-report` | Third-party actions; no native JUnit support |
 | `emailext` | `dawidd6/action-send-mail` | Third-party action; no native email |
 | `slackSend` | `slackapi/slack-github-action` | Official Slack action available |
 | `withSonarQubeEnv` | `sonarsource/sonarqube-scan-action` | Official SonarQube action |
 | `cleanWs()` / `deleteDir()` | Not needed — runners are ephemeral | Workspace is automatically cleaned |
 | `buildDiscarder` / `logRotator` | Workflow run retention settings | Configure in repo settings or via API |
 | `Jenkinsfile` in repo root | `.github/workflows/*.yml` | Multiple workflow files; naming convention matters |
+| `tool 'JDK-17'` / `jdk` agent option | `actions/setup-java@v4` with `distribution` + `java-version` | Specify distribution (e.g., `temurin`); supports caching via `cache: maven` or `cache: gradle` |
+| `mvn` / `./mvnw` in `sh` steps | `actions/setup-java` + `run: ./mvnw --batch-mode verify` | Use `--batch-mode --update-snapshots` for CI; prefer `mvnw` for version consistency |
+| `./gradlew` in `sh` steps | `gradle/actions/setup-gradle` + `run: ./gradlew build` | Action manages caching and daemon lifecycle; pin to SHA |
+| Maven `settings.xml` via `configFileProvider` | `actions/setup-java` `server-id` / `server-username` / `server-password` | Auto-generates `~/.m2/settings.xml`; no config file plugin needed |
+| `docker.build()` / `docker.push()` | `docker/build-push-action` + `docker/login-action` | Or use Spring Boot buildpacks: `mvn spring-boot:build-image` / `./gradlew bootBuildImage` |
+| `junit '**/target/surefire-reports/*.xml'` | `dorny/test-reporter` or `mikepenz/action-junit-report` | Publishes test results as PR check annotations |
 
 ### Output Type Rule
 
@@ -220,6 +208,20 @@ The migration spec MUST incorporate these best practices in the target architect
 - **Branch protection**: Require status checks to pass before merging; protect workflow files from unauthorized changes
 - **Immutable artifacts**: Upload build artifacts with `actions/upload-artifact@v4`; use content-addressable names where possible
 - **Timeout configuration**: Set `timeout-minutes` on every job to prevent runaway builds
+
+**Spring / Java Application Patterns (apply when the pipeline builds a Java/Spring project):**
+
+- **JDK setup**: Use `actions/setup-java@v4` with explicit `java-version`, `distribution` (prefer `temurin`), and `cache` parameter. Set `cache: maven` for Maven projects or `cache: gradle` for Gradle projects — this replaces manual `actions/cache` configuration for dependencies
+- **Maven builds**: Run with `--batch-mode --update-snapshots` flags in CI (e.g., `mvn --batch-mode --update-snapshots verify`). `--batch-mode` suppresses interactive prompts and produces cleaner logs; `--update-snapshots` ensures SNAPSHOT dependencies are current
+- **Gradle builds**: Use the `gradle/actions/setup-gradle` action (SHA-pinned) instead of invoking `./gradlew` directly — it provides caching, build scan integration, and daemon management. Ensure Gradle daemons are stopped before workflow completion to avoid cache file locks (`./gradlew --stop` or use `setup-gradle`'s built-in daemon management)
+- **Maven wrapper**: If the project includes `mvnw`, use `./mvnw` instead of `mvn` to ensure build reproducibility with the exact Maven version the project specifies
+- **Multi-JDK testing**: Use `strategy.matrix` with `java-version: ['17', '21']` (or project-relevant versions) to test across JDK versions in parallel
+- **Artifact uploads**: Maven outputs to `target/`, Gradle to `build/libs/`. Upload JARs/WARs with `actions/upload-artifact@v4` using content-addressable names (e.g., include `${{ github.sha }}`)
+- **Container images**: For Spring Boot apps, prefer Spring Boot's built-in buildpack support (`mvn spring-boot:build-image` / `./gradlew bootBuildImage`) over manual Dockerfiles when possible — it produces OCI-compliant, layered images without requiring a Dockerfile. When a Dockerfile is needed, use `docker/build-push-action` with `docker/login-action` for registry authentication
+- **Container registry**: Use `ghcr.io` with `GITHUB_TOKEN` for GitHub Container Registry (requires `packages: write` permission), or configure external registries (Docker Hub, ECR, GCR, ACR) via their respective login actions
+- **Package publishing**: For Maven Central publishing, use `actions/setup-java@v4` with `server-id`, `server-username`, and `server-password` parameters to configure `~/.m2/settings.xml` automatically. For GitHub Packages, use the `GITHUB_TOKEN` with `packages: write` permission
+- **Test reporting**: Use `dorny/test-reporter` or `mikepenz/action-junit-report` (SHA-pinned) to publish JUnit XML results from `target/surefire-reports/` (Maven) or `build/test-results/` (Gradle) as PR check annotations
+- **Build attestation**: For container images, use `actions/attest-build-provenance` to generate SLSA provenance attestations for supply chain security
 
 ### Migration Spec Template
 
@@ -297,6 +299,7 @@ Map every Jenkins concept used in this pipeline to its GHA equivalent:
 - [ ] Downstream job triggering
 - [ ] Test result publishing
 - [ ] Notification delivery
+- [ ] Java/Spring build tooling (JDK setup, Maven/Gradle caching, build flags, container image strategy)
 
 ## Secrets Inventory (Post-Migration)
 
@@ -368,15 +371,6 @@ Common non-goals to consider:
 - Composite action creation (filed as GitHub issues for post-migration)
 - Parallel run comparison with Jenkins
 
-## Security Considerations
-
-- **Workflow permissions**: Explicit `permissions:` block with minimum scopes
-- **Action pinning**: All third-party actions pinned to full SHA
-- **Log masking**: `::add-mask::` for dynamic sensitive values
-- **Branch protection**: Required status checks, PR reviews for workflow changes
-- **Fork PR security**: `pull_request_target` usage restrictions
-- **GITHUB_TOKEN**: Minimum required permissions per job
-
 ## Success Metrics
 
 1. **Functional representation**: All Jenkins stages have equivalent GHA jobs that represent the same pipeline logic
@@ -409,26 +403,17 @@ Iterate based on feedback until satisfied.
 
 ## Critical Constraints
 
-**NEVER:**
+**Boundary** — This step produces only the specification document. Do not begin implementation.
 
-- Start implementing the migration — only create the specification document
-- Recommend unpinned third-party actions (always require full SHA pinning)
-- Skip the platform delta analysis
-- Omit the secrets inventory
-- Omit the risk assessment
-- Skip the clarifying questions phase
-- Recommend storing long-lived cloud credentials when OIDC is available
-- Create specs that are too large without addressing scope issues
+**Completeness** — Every section in the template is mandatory because downstream steps depend on it:
+- Platform delta analysis → SDM-3 derives tasks from it; gaps here become gaps in the migration
+- Secrets inventory → SDM-4 files post-migration issues from it; missing entries mean unconfigured credentials
+- Risk assessment → SDM-3 embeds mitigations into tasks; unidentified risks surface as surprises during execution
+- Clarifying questions → the spec needs user input that can't be derived from code alone; skipping this leads to wrong assumptions
 
-**ALWAYS:**
+**Security posture** — All action references must use full commit SHA pinning (tags are mutable and can be hijacked). Recommend OIDC federation over stored credentials for cloud providers — long-lived keys are a security and rotation burden.
 
-- Reference the discovery report as the factual basis
-- Ask clarifying questions before generating the spec
-- Include a complete platform delta analysis mapping all Jenkins concepts to GHA equivalents
-- Include secrets inventory with post-migration framing (deferred items will be filed as GitHub issues)
-- Include CI/CD best practices in the target architecture
-- Include risk assessment with mitigation strategies
-- Enforce action pinning to full commit SHAs in all examples
+**Foundation** — Reference the discovery report as the factual basis. If no discovery report exists, direct the user to run `/SDM-1-discovery-assessment` first.
 
 ## What Comes Next
 
