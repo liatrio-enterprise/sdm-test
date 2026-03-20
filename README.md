@@ -1,40 +1,32 @@
 <div align="center">
-    <img src="./misc/header.png" alt="Spec Driven Development header" width="400"/>
-    <h1>🧭 Spec-Driven Development Workflow</h1>
-    <h3><em>Build predictable software with a repeatable AI-guided workflow.</em></h3>
+    <h1>Spec-Driven Migration (SDM) Workflow</h1>
+    <h3><em>Migrate Jenkins pipelines to GitHub Actions with a repeatable, AI-guided workflow.</em></h3>
 </div>
 
 <p align="center">
-    <strong>Spec-driven development prompts for collaborating with AI agents to deliver reliable outcomes.</strong>
-</p>
-
-<p align="center">
-    <a href="https://github.com/liatrio-labs/spec-driven-workflow/actions/workflows/ci.yml"><img src="https://github.com/liatrio-labs/spec-driven-workflow/actions/workflows/ci.yml/badge.svg" alt="CI Status"/></a>
-    <a href="https://github.com/liatrio-labs/spec-driven-workflow/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"/></a>
-    <a href="https://github.com/liatrio-labs/spec-driven-workflow/stargazers"><img src="https://img.shields.io/github/stars/liatrio-labs/spec-driven-workflow?style=social" alt="GitHub stars"/></a>
+    <strong>Structured prompts for collaborating with AI agents to deliver reliable Jenkins-to-GitHub Actions migrations.</strong>
 </p>
 
 ## Overview
 
-This repository provides **structured prompts** (Markdown files) that guide AI assistants through a complete software development workflow:
+This repository provides **structured prompts** (Markdown files) that guide AI assistants through a complete Jenkins-to-GitHub Actions migration workflow:
 
-- **Define intent**: generate a reviewed spec with clear demo criteria
-- **Plan**: break work into demoable tasks and subtasks
-- **Execute**: implement with checkpoints and proof artifacts
-- **Validate**: verify implementation against the spec with evidence
+- **Discover**: audit existing Jenkins pipelines, plugins, credentials, shared libraries, and infrastructure
+- **Specify**: generate a migration spec with platform delta analysis, secrets strategy, and CI/CD best practices
+- **Plan**: break migration work into ordered, implementable tasks using infrastructure-first sequencing
+- **Execute**: implement GitHub Actions workflows with checkpoints, actionlint validation, and secret verification gates
+- **Validate**: verify migration completeness with parity testing, best practices audit, and post-migration issue review
 
-Think of these prompts as reusable playbooks that keep AI agents focused and consistent across long conversations.
+Think of these prompts as reusable playbooks that keep AI agents focused and consistent across the entire migration lifecycle.
 
 ## Table of Contents
 
 - [TLDR / Quickstart](#tldr--quickstart)
-- [Details for the 4-step workflow](#details-for-the-4-step-workflow)
+- [Details for the 5-step workflow](#details-for-the-5-step-workflow)
 - [Artifacts and directory layout](#artifacts-and-directory-layout)
-- [Documentation](#documentation)
 - [Context verification markers](#context-verification-markers)
 - [Security best practices](#security-best-practices)
 - [Contributing](#contributing)
-- [References](#references)
 - [License](#license)
 
 ## TLDR / Quickstart
@@ -45,12 +37,12 @@ Think of these prompts as reusable playbooks that keep AI agents focused and con
 
 Install these prompts as native `/slash-commands` in your AI assistant (Cursor, Windsurf, Claude Code, etc.) using the [slash-command-manager](https://github.com/liatrio-labs/slash-command-manager) utility:
 
-**Prerequisite:** `uvx` comes from [uv](https://docs.astral.sh/uv/). Install uv first if you don’t already have it:
+**Prerequisite:** `uvx` comes from [uv](https://docs.astral.sh/uv/). Install uv first if you don't already have it:
 
 - (Mac): `brew install uv`
 - (Windows): `winget install astral-sh.uv`
 
-##### Install SDD w/ Bash (Mac)
+##### Install SDM w/ Bash (Mac)
 
 ```bash
 uvx --from git+https://github.com/liatrio-labs/slash-command-manager \
@@ -60,7 +52,7 @@ uvx --from git+https://github.com/liatrio-labs/slash-command-manager \
   --github-path prompts/
 ```
 
-##### Install SDD w/ PowerShell (Windows)
+##### Install SDM w/ PowerShell (Windows)
 
 ```ps
 uvx --from git+https://github.com/liatrio-labs/slash-command-manager `
@@ -78,13 +70,9 @@ uvx --from git+https://github.com/liatrio-labs/slash-command-manager `
 - Downloads the prompt files for each supported tool from the `prompts/` directory
 - Installs them as slash commands for each supported tool
 
-**Result:** you can now type `/SDD-1-generate-spec` in your AI assistant to start the workflow.
+**Result:** you can now type `/SDM-1-discovery-assessment` in your AI assistant to start the workflow.
 
 **Where to use the slash commands:** in AI chat UIs (e.g., Windsurf, Claude Code) type `/` in the chat input. Some AI assistants require being in "Agent" or "Code" mode for slash commands to appear.
-
-<img max-width="500" alt="Example of slash commands installed in Claude Code" src="docs/assets/images/slash-command-example-claude.png" />
-
-<img max-width="500" alt="Example of slash commands installed in Windsurf" src="docs/assets/images/slash-command-example-windsurf.png" />
 
 #### Option B: Manual Copy-Paste (No Installation)
 
@@ -92,104 +80,72 @@ Copy the contents of a prompt file directly from `prompts/` and paste it into yo
 
 ### Quick "try it" flow
 
-1. Run `/SDD-1-generate-spec` and describe the feature you want.
-2. Next, use `/SDD-2-generate-task-list-from-spec` pointing it at the generated spec.
-3. Then execute `/SDD-3-manage-tasks` to implement tasks one at a time (creating proof artifacts before commits).
-4. Finally, apply `/SDD-4-validate-spec-implementation` to verify the implementation against the spec.
+1. Run `/SDM-1-discovery-assessment` and point it at your Jenkinsfile or Jenkins pipeline configuration.
+2. Next, use `/SDM-2-generate-migration-spec` to create a migration spec from the discovery report.
+3. Then run `/SDM-3-generate-migration-tasks` to generate an ordered task list from the spec.
+4. Execute `/SDM-4-execute-migration` to implement the GitHub Actions workflows task by task.
+5. Finally, apply `/SDM-5-validate-migration` to verify migration completeness and parity.
 
-## Details for the 4-step workflow
+## Details for the 5-step workflow
 
 Each step uses a different prompt file and produces specific artifacts in `docs/specs/`.
 
-1. **Generate a spec** ([`prompts/SDD-1-generate-spec.md`](./prompts/SDD-1-generate-spec.md))
-   - **What it does**: asks structured clarifying questions, checks scope, and writes a junior-friendly spec with demo criteria
-   - **Output**: `docs/specs/[NN]-spec-[feature-name]/[NN]-spec-[feature-name].md`
-   - **Why**: aligns humans + AI on what to build before any code changes
+1. **Discovery and Assessment** ([`prompts/SDM-1-discovery-assessment.md`](./prompts/SDM-1-discovery-assessment.md))
+   - **What it does**: audits existing Jenkins pipelines, plugins, credentials, shared libraries, and infrastructure
+   - **Output**: discovery report documenting the current Jenkins environment
+   - **Why**: builds the factual foundation for the entire migration — everything downstream traces back to this inventory
 
-2. **Generate a task list** ([`prompts/SDD-2-generate-task-list-from-spec.md`](./prompts/SDD-2-generate-task-list-from-spec.md))
-   - **What it does**: converts the spec into parent tasks (demoable units) + detailed subtasks with a "Relevant Files" section
-   - **Output**: `docs/specs/[NN]-spec-[feature-name]/[NN]-tasks-[feature-name].md`
-   - **Why**: creates an actionable plan with clear checkpoints and reviewable scope
+2. **Generate Migration Spec** ([`prompts/SDM-2-generate-migration-spec.md`](./prompts/SDM-2-generate-migration-spec.md))
+   - **What it does**: transforms the discovery inventory into a migration specification with platform delta analysis, secrets strategy, and CI/CD best practices
+   - **Output**: migration specification — the single source of truth for the rest of the workflow
+   - **Why**: maps Jenkins concepts to GitHub Actions equivalents and identifies gaps before implementation begins
 
-3. **Manage tasks (implementation loop)** ([`prompts/SDD-3-manage-tasks.md`](./prompts/SDD-3-manage-tasks.md))
-   - **What it does**: guides execution with checkpoints, verification checklists, and proof artifacts created **before** each commit
-   - **Output**: `docs/specs/[NN]-spec-[feature-name]/[NN]-proofs/[NN]-task-[TT]-proofs.md`
-   - **Why**: keeps work single-threaded, demoable, and evidence-driven
+3. **Generate Migration Tasks** ([`prompts/SDM-3-generate-migration-tasks.md`](./prompts/SDM-3-generate-migration-tasks.md))
+   - **What it does**: breaks the migration spec into ordered, implementable tasks using infrastructure-first sequencing (foundation → pipeline → post-migration)
+   - **Output**: ordered task list with parent tasks and subtasks
+   - **Why**: CI/CD migrations have real dependency chains — task ordering ensures each layer is verified before the next begins
 
-4. **Validate implementation** ([`prompts/SDD-4-validate-spec-implementation.md`](./prompts/SDD-4-validate-spec-implementation.md))
-   - **What it does**: validates implementation vs spec using proof artifacts, applies validation gates, produces a coverage matrix
-   - **Output**: validation report (markdown) showing verified/missing items
-   - **Why**: confirms completeness before shipping
+4. **Execute Migration** ([`prompts/SDM-4-execute-migration.md`](./prompts/SDM-4-execute-migration.md))
+   - **What it does**: converts Jenkins pipeline configurations into working GitHub Actions workflows with actionlint validation, secret verification gates, and proof artifacts
+   - **Output**: GitHub Actions workflow files and proof artifacts for each task
+   - **Why**: structured execution with verification at each step prevents cascading issues
 
-5. **SHIP IT** 🚢💨
+5. **Validate Migration** ([`prompts/SDM-5-validate-migration.md`](./prompts/SDM-5-validate-migration.md))
+   - **What it does**: validates migration completeness with parity testing, best practices audit, and post-migration issue review
+   - **Output**: validation report with coverage matrix and any deferred items captured as GitHub issues
+   - **Why**: confirms the GitHub Actions workflows are functionally equivalent to the original Jenkins pipelines
+
+6. **SHIP IT**
 
 ## Highlights
 
-- **Prompt-first workflow:** Use curated prompts to go from idea → spec → task list → implementation-ready backlog.
-- **Predictable delivery:** Every step emphasizes demoable slices, proof artifacts, and collaboration with junior developers in mind.
+- **Migration-focused workflow:** Purpose-built prompts for Jenkins-to-GitHub Actions migrations, covering discovery through validation.
+- **Infrastructure-first sequencing:** Tasks are ordered by dependency (foundation → pipeline logic → post-migration) to prevent cascading failures.
+- **Built-in CI/CD best practices:** Prompts enforce actionlint validation, secret verification gates, YAML anchors/aliases, and proper env var scoping.
 - **No dependencies required:** The prompts are plain Markdown files that work with any AI assistant.
-- **Context verification:** Built-in emoji markers (SDD1️⃣-SDD4️⃣) detect when AI responses follow critical instructions, helping identify context rot issues early.
+- **Context verification:** Built-in emoji markers (SDM1️⃣–SDM5️⃣) detect when AI responses follow critical instructions, helping identify context rot issues early.
 
-## Why Spec-Driven Development?
+## Why Spec-Driven Migration?
 
-Spec-Driven Development (SDD) keeps AI collaborators and human developers aligned around a shared source of truth. This repository provides a lightweight, prompt-centric workflow that turns an idea into a reviewed specification, an actionable plan, and a disciplined execution loop. By centering on markdown artifacts instead of tooling, the workflow travels with you—across projects, models, and collaboration environments.
+Jenkins-to-GitHub Actions migrations involve translating complex pipeline logic, plugin ecosystems, shared libraries, and credential management across fundamentally different platforms. Without a structured approach, migrations often miss edge cases, break CI/CD parity, or leave behind undocumented gaps.
 
-## Guiding Principles
-
-- **Clarify intent before delivery:** The spec prompt enforces clarifying questions so requirements are explicit and junior-friendly.
-- **Ship demoable slices:** Every stage pushes toward thin, end-to-end increments with clear demo criteria and proof artifacts.
-- **Make work transparent:** Tasks live in versioned markdown files so stakeholders can review, comment, and adjust scope anytime.
-- **Progress one slice at a time:** The management prompt enforces single-threaded execution to reduce churn and unfinished work-in-progress.
-- **Stay automation ready:** While SDD works with plain Markdown, the prompts are structured for MCP, IDE agents, or other AI integrations.
+SDM provides a lightweight, prompt-centric workflow that turns a Jenkins environment into a discovery report, a migration spec, an ordered task list, verified GitHub Actions workflows, and a validation report — all guided by AI and grounded in artifacts that humans can review at every step.
 
 ## Artifacts and directory layout
 
-Each prompt writes Markdown outputs into `docs/specs/[NN]-spec-[feature-name]/` (where `[NN]` is a zero-padded 2-digit number: 01, 02, 03, etc.), giving you a lightweight backlog that is easy to review, share, and implement.
+Each prompt writes Markdown outputs into `docs/specs/[NN]-spec-[feature-name]/` (where `[NN]` is a zero-padded 2-digit number: 01, 02, 03, etc.).
 
-- **Specs:** `docs/specs/[NN]-spec-[feature-name]/[NN]-spec-[feature-name].md`
+- **Discovery reports:** `docs/specs/[NN]-spec-[feature-name]/[NN]-discovery-[feature-name].md`
+- **Migration specs:** `docs/specs/[NN]-spec-[feature-name]/[NN]-spec-[feature-name].md`
 - **Task lists:** `docs/specs/[NN]-spec-[feature-name]/[NN]-tasks-[feature-name].md`
 - **Proof artifacts:** `docs/specs/[NN]-spec-[feature-name]/[NN]-proofs/[NN]-task-[TT]-proofs.md`
 - **Validation reports:** `docs/specs/[NN]-spec-[feature-name]/[NN]-validation-[feature-name].md`
 
-Example directory structure:
-
-```bash
-docs/specs
-└── 01-spec-feature-name
-    ├── 01-proofs
-    │   ├── 01-task-01-proofs.md
-    │   ├── 01-task-02-proofs.md
-    │   ├── 01-task-03-proofs.md
-    │   └── 01-task-04-proofs.md
-    ├── 01-questions-1-feature-name.md
-    ├── 01-spec-feature-name.md
-    ├── 01-tasks-feature-name.md
-    └── 01-validation-feature-name.md
-```
-
-## Documentation
-
-For comprehensive documentation, examples, and detailed guides, visit the **SDD Playbook**:
-
-- **[SDD Playbook](https://liatrio-labs.github.io/spec-driven-workflow/)** — Complete overview and workflow guide
-- **[Comparison](https://liatrio-labs.github.io/spec-driven-workflow/comparison.html)** — How SDD compares to other structured development tools
-- **[Developer Experience](https://liatrio-labs.github.io/spec-driven-workflow/developer-experience.html)** — Real-world usage examples and patterns
-- **[Common Questions](https://liatrio-labs.github.io/spec-driven-workflow/common-questions.html)** — FAQ and troubleshooting
-- **[Video Overview](https://liatrio-labs.github.io/spec-driven-workflow/video-overview.html)** — Visual walkthrough of the workflow
-- **[Reference Materials](https://liatrio-labs.github.io/spec-driven-workflow/reference-materials.html)** — Additional resources and examples
-
-### Getting help
-
-- **Start here**: [Common Questions](https://liatrio-labs.github.io/spec-driven-workflow/common-questions.html)
-- **Ask/Report**: open a GitHub Issue in this repo with details about your environment + prompt/tooling
-
 ## Context verification markers
 
-Each prompt includes a context verification marker (SDD1️⃣ for spec generation, SDD2️⃣ for task breakdown, SDD3️⃣ for task management, SDD4️⃣ for validation) that appears at the start of AI responses. These markers help detect **context rot**—a phenomenon where AI performance degrades as input context length increases, even when tasks remain simple.
+Each prompt includes a context verification marker (SDM1️⃣ through SDM5️⃣) that appears at the start of AI responses. These markers help detect **context rot** — where AI performance degrades as input context length increases, even when tasks remain simple.
 
-**Why this matters:** Context rot doesn't announce itself with errors. It creeps in silently, causing models to lose track of critical instructions. When you see the marker at the start of each response, it's an <strong>indicator</strong> that the AI is probably following the prompt's instructions. If the marker disappears, it's an immediate signal that context instructions may have been lost.
-
-**What to expect:** You'll see responses like `SDD1️⃣ I'll help you generate a specification...` or `SDD3️⃣ Let me start implementing task 1.0...`. This is normal and indicates the verification system is working. For more details, see the [research documentation](docs/emoji-context-verification-research.md).
+**What to expect:** Responses like `SDM1️⃣ I'll audit the Jenkinsfile...` or `SDM4️⃣ Let me implement the workflow file...`. If the marker disappears, context instructions may have been lost. For more details, see the [research documentation](docs/emoji-context-verification-research.md).
 
 ## Security Best Practices
 
@@ -202,19 +158,11 @@ Proof artifacts are committed to your repository and may be publicly visible. **
 - **Sanitize command output**: Review CLI output and logs for accidentally captured credentials before committing
 - **Consider pre-commit hooks**: Tools like [gitleaks](https://github.com/gitleaks/gitleaks), [truffleHog](https://github.com/trufflesecurity/truffleHog), or [talisman](https://github.com/thoughtworks/talisman) can automatically scan for secrets before commits
 
-The SDD workflow prompts include built-in reminders about security, but ultimate responsibility lies with the developer to review artifacts before committing or pushing to remotes.
+The SDM workflow prompts include built-in reminders about security, but ultimate responsibility lies with the developer to review artifacts before committing or pushing to remotes.
 
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md). Please review [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
-
-## References
-
-| Reference | Description | Link |
-| --- | --- | --- |
-| AI Dev Tasks | Foundational example of an SDD workflow expressed entirely in Markdown. | [snarktank/ai-dev-tasks](https://github.com/snarktank/ai-dev-tasks) |
-| Slash Command Manager | Utility for installing prompts as slash commands in AI assistants. | [liatrio-labs/slash-command-manager](https://github.com/liatrio-labs/slash-command-manager) |
-| MCP | Standard protocol for AI agent interoperability. | [modelcontextprotocol.io](https://modelcontextprotocol.io/docs/getting-started/intro) |
 
 ## License
 
