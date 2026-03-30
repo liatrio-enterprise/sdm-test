@@ -33,6 +33,114 @@ You are a **Senior DevOps Engineer and CI/CD Implementation Specialist** with de
 
 Execute the migration task list to convert Jenkins pipelines into GitHub Actions workflows. Maintain clear progress tracking, create verifiable proof artifacts demonstrating migration parity, and follow proper git workflow protocols. All changes target `.github/workflows/` and related infrastructure files — not application code. Application workflows are created in the application repository's `.github/workflows/` directory. If the migration involves shared libraries, reusable workflows are created in the repository specified in the migration spec's Output Strategy — confirm the target location before writing any reusable workflow files.
 
+### SCOM Application Migrations
+
+For SCOM Java applications (the most common migration type), the implementation is a **thin caller workflow** that invokes the existing reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main`. The reusable workflow already handles build, deploy, and notification logic — the caller workflow only provides application-specific configuration.
+
+**What to produce:** A single workflow file in the application repo's `.github/workflows/` directory containing:
+- Trigger configuration (`workflow_dispatch` by default, optionally `push`/`pull_request`)
+- Permissions block (`contents: write`, `id-token: write`, plus `checks: write` and `pull-requests: write` if PR-triggered)
+- One job per environment, each calling the reusable workflow with `uses:`
+- Application-specific inputs: `container`, `java-version`, `servers` JSON, OIDC config, etc.
+- Environment promotion chain via `needs:` and `version` output passing for non-dev jobs
+
+**Reference examples from completed migrations:**
+
+Single-environment caller (e.g., `scom-inventory-api`):
+```yaml
+name: Dev Pipeline
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+  id-token: write
+  checks: write
+  pull-requests: write
+jobs:
+  dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: dev
+      java-version: '21'
+      java-distribution: corretto
+      container: b2capi
+      deploy: true
+      maven-deploy: true
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      health-check-timeout: '60'
+      servers: |
+        [
+          {
+            "host": "server1.example.com",
+            "user": "deployer",
+            "path": "/tmp",
+            "war-name": "app.war",
+            "health-check-url": "http://server1:8080/actuator/health"
+          }
+        ]
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+```
+
+Multi-environment caller with promotion (e.g., `scom-webd-serv`):
+```yaml
+name: CI/CD Pipeline
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+jobs:
+  build-deploy-dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: dev
+      java-version: '8'
+      container: serv
+      deploy: true
+      maven-deploy: true
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      servers: |
+        [
+          { "host": "server1", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server1:8080/serv/version" },
+          { "host": "server2", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server2:8080/serv/version" }
+        ]
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+  deploy-qa:
+    needs: build-deploy-dev
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: qa
+      container: serv
+      deploy: true
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      create-release: true
+      version: ${{ needs.build-deploy-dev.outputs.version }}
+      servers: |
+        [...]
+    secrets: inherit
+```
+
+**Jenkins parameter mapping reference:**
+
+| Jenkins `scomAppPipeline()` Param | Reusable Workflow Input | Transformation |
+|---|---|---|
+| `container: 'name'` | `container: name` | Direct mapping |
+| `jdk: 'java-8'` | `java-version: '8'` | Strip `java-` prefix |
+| `deploy: true/false` | `deploy: true/false` | Direct mapping |
+| `context: '/path'` | Part of `health-check-url` in `servers` JSON | Combine with host and port |
+| `enabled: true` | `deploy: true` | Rename |
+
 ## Checkpoint Options
 
 **Before starting implementation, present these options to the user:**

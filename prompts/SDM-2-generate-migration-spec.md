@@ -73,14 +73,25 @@ Ask clarifying questions to gather detail not available from the Jenkinsfile alo
 - Are there compliance requirements for secret rotation or audit logging?
 - What branch protection rules should be enforced?
 
+**SCOM Application Details (if SCOM pipeline detected):**
+
+- What are the deployment server details? For each environment (dev, qa, staging, prod):
+  - Server hostname(s), SSH user, deploy path, WAR file name, and health check URL
+- What is the OIDC provider name and audience for JFrog Artifactory? (e.g., `soa-scom-github`)
+- What is the JFrog Maven repository prefix? (e.g., `scom-mvn`, `snet-mvn`)
+- Should Maven artifacts be published to JFrog on dev builds? (`maven-deploy`)
+- What environments are in the promotion chain? (e.g., dev → qa → staging → prod)
+- Should any non-dev environment create a Git tag/GitHub release? (`create-release`)
+
 **Existing Reusable Components:**
 
 - Do you have any existing GitHub Actions composite actions or reusable workflows that this pipeline should use?
 - If so, please provide the paths or repository references so they can be incorporated
+- **Note:** For SCOM applications, the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml` is the standard target — no new reusable workflow needs to be created
 
-**Reusable Workflow Placement (if shared libraries are involved):**
+**Reusable Workflow Placement (if non-SCOM shared libraries are involved):**
 
-- If the Jenkinsfile calls shared libraries, the library logic will become reusable workflow(s). Where should these live?
+- If the Jenkinsfile calls non-SCOM shared libraries, the library logic will become reusable workflow(s). Where should these live?
   - (A) In the application repository alongside the calling workflow
   - (B) In a dedicated shared-workflows repository (provide repo name)
   - (C) In an organization-level `.github` repository
@@ -175,9 +186,165 @@ Use this reference table when mapping Jenkins concepts to GitHub Actions equival
 
 ### Output Type Rule
 
+- **SCOM Java application** (Jenkinsfile calling `scomAppPipeline()`) → **Thin caller workflow** invoking the existing `scom-app-pipeline.yml` reusable workflow. No new reusable workflow is needed — the target already exists at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main`. **This is the most common migration type.**
 - If the source is a **Jenkinsfile** (application pipeline) that does **not** call shared libraries, the output is a **GitHub Actions workflow** placed in the application repository's `.github/workflows/<name>.yml`
-- If the source is a **Jenkinsfile** that **calls shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** invoked via `workflow_call`. The application workflow calls this reusable workflow. **Prompt the user for where the reusable workflow should live** (application repo, dedicated shared-workflows repo, or organization-level repo). Record the decision in the spec under "Output Strategy"
+- If the source is a **Jenkinsfile** that **calls non-SCOM shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** invoked via `workflow_call`. The application workflow calls this reusable workflow. **Prompt the user for where the reusable workflow should live** (application repo, dedicated shared-workflows repo, or organization-level repo). Record the decision in the spec under "Output Strategy"
 - If the source is a **standalone shared library** (`vars/*.groovy`, `src/**/*.groovy`) being migrated independently, the output is a **reusable workflow** and the user must be prompted for the target repository
+
+### SCOM Caller Workflow Architecture
+
+For SCOM application migrations, the spec should define a **caller workflow** that passes application-specific parameters to the reusable workflow. The reusable workflow handles all build, deploy, and notification logic — the caller workflow only provides configuration.
+
+**Reusable workflow reference:**
+```
+SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+```
+
+**Reusable workflow inputs:**
+
+| Input | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `environment` | string | yes | — | Target environment (dev, qa, staging, prod). Build steps only run for dev. |
+| `java-version` | string | no | `'21'` | JDK version |
+| `java-distribution` | string | no | `'corretto'` | JDK distribution |
+| `container` | string | yes | — | Logical container name (used in concurrency groups) |
+| `deploy` | boolean | no | `true` | Enable deployment stages |
+| `servers` | string | yes | — | JSON array of server targets (see format below) |
+| `maven-deploy` | boolean | no | `false` | Enable Maven artifact publishing to JFrog |
+| `oidc-provider-name` | string | yes | — | OIDC provider name in JFrog Artifactory |
+| `oidc-audience` | string | yes | — | OIDC audience value in JFrog Artifactory |
+| `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`) |
+| `create-release` | boolean | no | `false` | Create Git tag and GitHub release after deploy |
+| `version` | string | no | `''` | App version (required for non-dev environments) |
+| `health-check-timeout` | string | no | `'60'` | Seconds to wait for health check |
+
+**Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
+
+**Required permissions:** `contents: write`, `id-token: write` (plus `checks: write` and `pull-requests: write` if PR-triggered)
+
+**Reusable workflow outputs:** `version` — resolved application version (from Maven build in dev, from input in non-dev)
+
+**Server JSON format:**
+```json
+[
+  {
+    "host": "hostname",
+    "user": "deploy-user",
+    "port": "22",
+    "path": "/deploy/path",
+    "war-name": "app.war",
+    "health-check-url": "http://hostname:port/endpoint"
+  }
+]
+```
+
+**Reference caller workflows (use as templates):**
+
+Single-environment (dev only):
+```yaml
+name: Dev Pipeline
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+  id-token: write
+  checks: write
+  pull-requests: write
+jobs:
+  dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: dev
+      java-version: '21'
+      java-distribution: corretto
+      container: b2capi
+      deploy: true
+      maven-deploy: true
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      health-check-timeout: '60'
+      servers: |
+        [
+          {
+            "host": "server1.example.com",
+            "user": "deployer",
+            "path": "/tmp",
+            "war-name": "app.war",
+            "health-check-url": "http://server1:8080/actuator/health"
+          }
+        ]
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+```
+
+Multi-environment with promotion chain (dev → qa):
+```yaml
+name: CI/CD Pipeline
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [develop]
+jobs:
+  build-deploy-dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: dev
+      java-version: '8'
+      container: serv
+      deploy: true
+      maven-deploy: true
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      servers: |
+        [
+          { "host": "server1", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server1:8080/serv/version" },
+          { "host": "server2", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server2:8080/serv/version" }
+        ]
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+  deploy-qa:
+    needs: build-deploy-dev
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: qa
+      container: serv
+      deploy: true
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      create-release: true
+      version: ${{ needs.build-deploy-dev.outputs.version }}
+      servers: |
+        [...]
+    secrets: inherit
+```
+
+**Key patterns for the caller workflow:**
+- Dev job builds from source (`environment: dev`) — the reusable workflow runs Maven build only for dev
+- Non-dev jobs skip the build and use `version` from the dev job's output
+- Non-dev jobs chain via `needs:` to enforce promotion order
+- `secrets: inherit` can be used for chained jobs in the same workflow
+- Multi-server deployments pass multiple entries in the `servers` JSON array
+
+**Jenkins-to-reusable-workflow parameter mapping:**
+
+| Jenkins `scomAppPipeline()` Param | Reusable Workflow Input | Transformation |
+|---|---|---|
+| `container: 'name'` | `container: name` | Direct mapping |
+| `jdk: 'java-8'` | `java-version: '8'` | Strip `java-` prefix |
+| `deploy: true/false` | `deploy: true/false` | Direct mapping |
+| `context: '/path'` | Part of `health-check-url` in `servers` JSON | Combine with host and port |
+| `enabled: true` | `deploy: true` | Rename |
+| (not in Jenkins) | `oidc-provider-name`, `oidc-audience` | New — ask user for OIDC config |
+| (not in Jenkins) | `repository-prefix` | New — ask user for JFrog repo prefix |
+| (not in Jenkins) | `servers` JSON | New — ask user for server details (host, user, path, war-name, health-check-url) |
 
 ### CI/CD Best Practices (Enforced Requirements)
 

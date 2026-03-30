@@ -38,9 +38,47 @@ This is **Step 1** of the Spec-Driven Migration Workflow. The discovery report y
 
 The migration output type depends on the source — classify early so the discovery report frames the right migration strategy:
 
+- **SCOM Java application** (Jenkinsfile calling `scomAppPipeline()` or similar SCOM shared library) → **Thin caller workflow** that invokes the existing `scom-app-pipeline.yml` reusable workflow in `SubaruOfAmerica/devops-cicd-workflows`. The reusable workflow already handles build, deploy, and notification logic — the migration task is to map Jenkins parameters to reusable workflow inputs. **This is the most common migration type.**
 - **Jenkinsfile without shared libraries** → GitHub Actions workflow (`.github/workflows/<name>.yml`)
-- **Jenkinsfile calling shared libraries** (`@Library`) → Application workflow + reusable workflow(s) via `workflow_call`. Ask the user where the reusable workflow should live (app repo, shared-workflows repo, or org-level repo)
+- **Jenkinsfile calling non-SCOM shared libraries** (`@Library`) → Application workflow + reusable workflow(s) via `workflow_call`. Ask the user where the reusable workflow should live (app repo, shared-workflows repo, or org-level repo)
 - **Standalone shared library** (`vars/*.groovy`) → Reusable workflow; prompt for target repository
+
+### SCOM Reusable Workflow Reference
+
+When the migration target is the SCOM reusable workflow, discovery should focus on extracting parameters that map to the reusable workflow's inputs. The reusable workflow lives at:
+
+```
+SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+```
+
+**Reusable workflow inputs to map during discovery:**
+
+| Input | Type | Required | Default | What to extract from Jenkins |
+|---|---|---|---|---|
+| `environment` | string | yes | — | Target environment (dev, qa, staging, prod) |
+| `java-version` | string | no | `'21'` | JDK version from `jdk` parameter or `tool` directive |
+| `java-distribution` | string | no | `'corretto'` | JDK distribution (usually corretto for SCOM) |
+| `container` | string | yes | — | Logical container/app name from `container` parameter |
+| `deploy` | boolean | no | `true` | Whether deployment is enabled |
+| `servers` | string (JSON) | yes | — | Server targets — host, user, path, war-name, health-check-url |
+| `maven-deploy` | boolean | no | `false` | Whether to publish artifacts to JFrog |
+| `oidc-provider-name` | string | yes | — | OIDC provider name for JFrog (e.g., `soa-scom-github`) |
+| `oidc-audience` | string | yes | — | OIDC audience for JFrog (e.g., `soa-scom-github`) |
+| `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`) |
+| `create-release` | boolean | no | `false` | Whether to create Git tag and GitHub release |
+| `version` | string | no | `''` | App version (required for non-dev environments) |
+| `health-check-timeout` | string | no | `'60'` | Seconds to wait for health check |
+
+**Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
+
+**Required permissions:** `contents: write`, `id-token: write`
+
+During discovery for SCOM apps, extract:
+1. The `container` name and any `context` path from the shared library call
+2. The JDK version (translate Jenkins format: `java-8` → `'8'`, `java-21` → `'21'`)
+3. Server hostnames, users, deploy paths, WAR file names, and health check URLs from deployment configuration
+4. Whether Maven artifact publishing is enabled
+5. The environment promotion chain (dev → qa → staging → prod)
 
 ## Your Role
 
@@ -85,12 +123,29 @@ Scan the repository for all Jenkins pipeline definitions:
 
 After locating Jenkinsfiles, check whether any are **thin wrappers** — Jenkinsfiles that contain little to no inline pipeline logic and instead delegate entirely to a shared library function. Common indicators:
 
-- The entire Jenkinsfile is a single function call (e.g., `orgPipeline(...)`, `buildAndDeploy(...)`)
+- The entire Jenkinsfile is a single function call (e.g., `scomAppPipeline(...)`, `orgPipeline(...)`, `buildAndDeploy(...)`)
 - No `pipeline {}` block, no `stage {}` definitions, no `steps {}` blocks
 - The file is very short (under ~10 lines of actual code, excluding comments)
 - Parameters are passed as a map to a top-level function rather than declared inline
 
-**If a wrapper pattern is detected, STOP and inform the user:**
+#### SCOM Shared Library Pattern (common case)
+
+If the Jenkinsfile calls `scomAppPipeline(...)`, this is an **SCOM application pipeline** and the migration target is a thin caller workflow invoking the existing `scom-app-pipeline.yml` reusable workflow. In this case:
+
+1. **Do NOT request the shared library source.** The shared library logic has already been migrated into the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml`.
+2. **Extract the parameters** passed to `scomAppPipeline()` — these map directly to the reusable workflow inputs (see SCOM Reusable Workflow Reference above).
+3. **Proceed with discovery** using the parameter mapping approach, supplemented by the repo's `pom.xml` for artifact/version details and any deployment configuration files for server targets.
+
+Example SCOM Jenkinsfile:
+```groovy
+scomAppPipeline(enabled: true, container: 'serv', context: '/serv', deploy: true, jdk: 'java-8')
+```
+
+This maps to a caller workflow with: `container: serv`, `java-version: '8'`, `deploy: true`.
+
+#### Non-SCOM Wrapper Pattern
+
+If a non-SCOM wrapper pattern is detected, STOP and inform the user:
 
 > This Jenkinsfile delegates its entire pipeline logic to a shared library function (`<functionName>`). The actual stages, credentials, plugins, and deployment logic live in the shared library source code, not in this file. To complete discovery, I need access to the shared library.
 >

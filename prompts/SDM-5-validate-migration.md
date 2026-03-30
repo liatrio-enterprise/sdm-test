@@ -60,6 +60,15 @@ All gates must pass for the migration to be approved:
 - **GATE C — Coverage**: Every Jenkins pipeline stage has a corresponding GHA job/step. Every platform delta from the spec is resolved
 - **GATE D — Post-Migration Issues**: GitHub issues have been filed to the repo covering all deferred items (secrets to configure, composite actions to create, integrations to wire up, triggers to activate, environment protection rules). Use `gh issue list --label post-migration` to verify.
 
+### SCOM Caller Workflow Validation (additional checks)
+
+For SCOM application migrations that produce a caller workflow invoking `scom-app-pipeline.yml`, also verify:
+
+- **GATE E — Parameter Completeness**: Every Jenkins `scomAppPipeline()` parameter has been mapped to a reusable workflow input. No required inputs are missing.
+- **GATE F — Server Configuration**: The `servers` JSON is valid and includes all required fields (`host`, `user`, `path`, `war-name`, `health-check-url`) for every target server.
+- **GATE G — Environment Chain**: If multi-environment, non-dev jobs use `needs:` to chain after the dev job and pass `version: ${{ needs.<dev-job>.outputs.version }}`.
+- **GATE H — Reusable Workflow Reference**: The `uses:` directive points to `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` (or the appropriate branch/tag).
+
 ## Evaluation Rubric (score each 0–3)
 
 Map score to severity: 0→CRITICAL, 1→HIGH, 2→MEDIUM, 3→OK.
@@ -118,6 +127,14 @@ Cross-reference:
 2. **Plugin dependencies** → all have GHA equivalents implemented
 3. **Platform deltas** → all are resolved (check the spec's completeness checklist)
 4. **Shared libraries** → all functions have reusable workflow or inline replacements, and reusable workflows are in the location specified by the migration spec's Output Strategy
+
+**For SCOM caller workflow migrations, also verify:**
+
+5. **Parameter mapping** → every Jenkins `scomAppPipeline()` parameter has a corresponding reusable workflow input in the caller workflow
+6. **Server JSON validity** → `servers` input is valid JSON with all required fields per server entry
+7. **Environment promotion** → non-dev jobs chain via `needs:` and pass `version` from the dev job output
+8. **Secret references** → `SSH_PRIVATE_KEY` and `TEAMS_WEBHOOK_URL` are passed correctly (directly or via `secrets: inherit`)
+9. **Permissions** → caller workflow includes `contents: write` and `id-token: write` at minimum
 
 ### Step 5 — Post-Migration Issue Review
 

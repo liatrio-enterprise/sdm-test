@@ -75,7 +75,25 @@ During **Phase 2** (parent task generation), after presenting the task list for 
 
 ## Output Type Rule
 
-Refer to the migration spec's **Output Strategy** section for the authoritative source-to-output mapping. The key rule: Jenkinsfiles without shared libraries produce a workflow; Jenkinsfiles with shared libraries produce a workflow + reusable workflow(s); standalone shared libraries produce reusable workflows. If the spec doesn't specify where reusable workflows live, **ask the user** before generating tasks.
+Refer to the migration spec's **Output Strategy** section for the authoritative source-to-output mapping:
+
+- **SCOM Java applications** (most common): The output is a **thin caller workflow** in the application repo's `.github/workflows/` that invokes the existing `scom-app-pipeline.yml` reusable workflow. No new reusable workflow is needed. The task structure is simpler — it's primarily about mapping Jenkins parameters to the reusable workflow's inputs and gathering deployment details (servers, OIDC config, etc.).
+- Jenkinsfiles without shared libraries produce a full workflow
+- Jenkinsfiles with non-SCOM shared libraries produce a workflow + reusable workflow(s)
+- Standalone shared libraries produce reusable workflows
+
+If the spec doesn't specify where reusable workflows live, **ask the user** before generating tasks.
+
+### SCOM Caller Workflow Task Pattern
+
+For SCOM application migrations, the task structure is streamlined because the reusable workflow already handles build, deploy, and notification logic. The typical task breakdown is:
+
+1. **Foundation** — Create caller workflow file with triggers, permissions, and the `uses:` reference to the reusable workflow
+2. **Parameter Mapping** — Map all Jenkins parameters to reusable workflow inputs (`container`, `java-version`, `servers` JSON, OIDC config, etc.)
+3. **Environment Chain** — Define the promotion chain (dev → qa → staging → prod) with `needs:` dependencies and version passing
+4. **Post-Migration Issues** — File issues for secrets configuration, trigger activation, and any environment-specific details
+
+This is significantly simpler than a full pipeline migration — the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` already encapsulates the CI/CD logic.
 
 ## Why Two-Phase Task Generation?
 
@@ -188,6 +206,47 @@ TBD
 - Artifact Diff: GHA build output matches Jenkins build output demonstrates functional equivalence
 - GHA Run: All tests pass with same results as Jenkins demonstrates test parity
 - actionlint: Clean output with no errors demonstrates valid workflow YAML
+
+#### 2.0 Tasks
+
+TBD
+
+### [ ] 3.0 File Post-Migration GitHub Issues
+
+#### 3.0 Proof Artifact(s)
+
+- GitHub Issues: All deferred items filed as issues to the repo
+
+#### 3.0 Tasks
+
+TBD
+```
+
+### SCOM Caller Workflow — Phase 2 Example
+
+For SCOM application migrations, use this simplified task structure instead:
+
+```markdown
+## Tasks
+
+### [ ] 1.0 Caller Workflow Foundation
+
+#### 1.0 Proof Artifact(s)
+
+- GHA Run: Caller workflow triggers via `workflow_dispatch` and invokes the reusable workflow successfully
+- actionlint: Clean output with no errors demonstrates valid workflow YAML
+
+#### 1.0 Tasks
+
+TBD
+
+### [ ] 2.0 Parameter Mapping and Environment Chain
+
+#### 2.0 Proof Artifact(s)
+
+- GHA Run: Dev job builds and deploys successfully using the reusable workflow
+- GHA Run: Non-dev jobs (if applicable) receive version from dev and deploy correctly
+- Diff: All Jenkins `scomAppPipeline()` parameters mapped to reusable workflow inputs
 
 #### 2.0 Tasks
 
