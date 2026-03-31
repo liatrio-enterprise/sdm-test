@@ -23,7 +23,9 @@ The marker for this instruction is:  SDM4️⃣
 
 ## You are here in the workflow
 
-This is **Step 4** — converting Jenkins pipeline configurations into working GitHub Actions workflows by executing the task list from SDM-3. Each parent task produces a commit with proof artifacts that SDM-5 will use for validation. Follow task ordering strictly — foundation before pipeline logic — because each layer depends on the previous one being verified.
+**Step 4 of 5.** Execute the migration task list, producing commits with proof artifacts for each parent task.
+
+**Depends on:** SDM-3 task list → **Produces for:** SDM-5 (validation)
 
 ## Your Role
 
@@ -44,92 +46,7 @@ For SCOM Java applications (the most common migration type), the implementation 
 - Application-specific inputs: `container`, `java-version`, `servers` JSON, OIDC config, etc.
 - Environment promotion chain via `needs:` and `version` output passing for non-dev jobs
 
-**Reference examples from completed migrations:**
-
-Single-environment caller (e.g., `scom-inventory-api`):
-```yaml
-name: Dev Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main]
-permissions:
-  contents: write
-  id-token: write
-  checks: write
-  pull-requests: write
-jobs:
-  dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: dev
-      java-version: '21'
-      java-distribution: corretto
-      container: b2capi
-      deploy: true
-      maven-deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      health-check-timeout: '60'
-      servers: |
-        [
-          {
-            "host": "server1.example.com",
-            "user": "deployer",
-            "path": "/tmp",
-            "war-name": "app.war",
-            "health-check-url": "http://server1:8080/actuator/health"
-          }
-        ]
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-```
-
-Multi-environment caller with promotion (e.g., `scom-webd-serv`):
-```yaml
-name: CI/CD Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [develop]
-jobs:
-  build-deploy-dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: dev
-      java-version: '8'
-      container: serv
-      deploy: true
-      maven-deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      servers: |
-        [
-          { "host": "server1", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server1:8080/serv/version" },
-          { "host": "server2", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server2:8080/serv/version" }
-        ]
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-  deploy-qa:
-    needs: build-deploy-dev
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: qa
-      container: serv
-      deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      create-release: true
-      version: ${{ needs.build-deploy-dev.outputs.version }}
-      servers: |
-        [...]
-    secrets: inherit
-```
+**Reference examples:** For complete single-environment and multi-environment caller workflow templates, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Reference Caller Workflows").
 
 ### SCOM Docker/AWS Application Migrations
 
@@ -147,156 +64,11 @@ For SCOM applications that deploy as Docker containers to AWS (ECS/Fargate and/o
    - Environment variables, port mappings, log configuration
    - Task role and execution role ARNs
 
-**Reference example — Docker/AWS single-environment caller:**
-```yaml
-name: Dev Pipeline
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
-#     branches: [main]
-on:
-  workflow_dispatch: # Manual-only trigger until migration is validated
-permissions:
-  contents: write
-  id-token: write
-jobs:
-  dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-    with:
-      environment: dev
-      container: assetmanager
-      java-version: '8'
-      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
-      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
-      deploy-ecs: true
-      ecs-cluster: scom-dev
-      ecs-service: assetmanager
-      ecs-container-name: assetmanager
-      deploy-lambda: true
-      lambda-function-names: '["SQSMessageHandlerStore", "SQSMessageHandlerRetrieve", "SQSMessageHandlerNotify", "SQSMessageHandlerDelete"]'
-      lambda-maven-profile: aws-lambda
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      health-check-url: http://assetmanager-dev:8088/actuator/health
-    secrets:
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-```
-
-**Reference example — Docker/AWS multi-environment with promotion:**
-```yaml
-name: CI/CD Pipeline
-on:
-  workflow_dispatch:
-jobs:
-  build-deploy-dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-    with:
-      environment: dev
-      container: assetmanager
-      java-version: '8'
-      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
-      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
-      deploy-ecs: true
-      ecs-cluster: scom-dev
-      ecs-service: assetmanager
-      ecs-container-name: assetmanager
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-    secrets:
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-
-  deploy-prod:
-    needs: build-deploy-dev
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-    with:
-      environment: prod
-      container: assetmanager
-      aws-role-arn: arn:aws:iam::926569254619:role/github-actions-deploy
-      ecr-registry: 926569254619.dkr.ecr.us-east-1.amazonaws.com
-      deploy-ecs: true
-      ecs-cluster: scom-prod
-      ecs-service: assetmanager
-      ecs-container-name: assetmanager
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      version: ${{ needs.build-deploy-dev.outputs.version }}
-    secrets: inherit
-```
-
-**Reference ECS task definition (`task-definition.json`):**
-```json
-{
-  "family": "assetmanager",
-  "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
-  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
-  "containerDefinitions": [
-    {
-      "name": "assetmanager",
-      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/assetmanager:latest",
-      "portMappings": [
-        {
-          "containerPort": 8088,
-          "protocol": "tcp"
-        }
-      ],
-      "environment": [
-        { "name": "SPRING_PROFILES_ACTIVE", "value": "dev" }
-      ],
-      "logConfiguration": {
-        "logDriver": "awslogs",
-        "options": {
-          "awslogs-group": "/ecs/assetmanager",
-          "awslogs-region": "us-east-1",
-          "awslogs-stream-prefix": "ecs"
-        }
-      },
-      "healthCheck": {
-        "command": ["CMD-SHELL", "curl -f http://localhost:8088/actuator/health || exit 1"],
-        "interval": 30,
-        "timeout": 5,
-        "retries": 3,
-        "startPeriod": 60
-      }
-    }
-  ]
-}
-```
-
-**Jenkins parameter mapping reference:**
-
-| Jenkins `scomAppPipeline()` Param | Reusable Workflow Input | Transformation |
-|---|---|---|
-| `container: 'name'` | `container: name` | Direct mapping |
-| `jdk: 'java-8'` | `java-version: '8'` | Strip `java-` prefix |
-| `deploy: true/false` | `deploy: true/false` | Direct mapping |
-| `context: '/path'` | Part of `health-check-url` in `servers` JSON | Combine with host and port |
-| `enabled: true` | `deploy: true` | Rename |
+**Reference examples and parameter mapping:** For complete Docker/AWS caller workflow templates, ECS task definition reference, and Jenkins-to-reusable-workflow parameter mapping, read `prompts/references/scom-app-pipeline-reference.md` (sections: "SCOM Docker/AWS Pipeline" → "Reference Caller Workflows" and "Jenkins-to-Reusable-Workflow Parameter Mapping").
 
 ## Checkpoint Options
 
-**Before starting implementation, present these options to the user:**
-
-1. **Continuous Mode**: Ask after each sub-task (1.1, 1.2, 1.3)
-   - Best for: Complex migrations, first-time GHA users
-   - Maximum control and immediate feedback
-
-2. **Task Mode** (Default): Ask after each parent task (1.0, 2.0, 3.0)
-   - Best for: Standard migrations
-   - Balance of control and momentum
-
-3. **Batch Mode**: Ask after all tasks complete
-   - Best for: Experienced users, straightforward migrations
-   - Maximum momentum
-
-**Default**: Task Mode if user doesn't specify.
+Before starting implementation, present checkpoint options to the user. See `prompts/references/checkpoint-modes.md` for the full descriptions. Default: Task Mode.
 
 ## Implementation Workflow
 
@@ -350,26 +122,7 @@ After creating or modifying any `.github/workflows/*.yml` file:
 
 ### CI/CD Best Practice Enforcement
 
-For every workflow file written, verify:
-
-- [ ] `permissions:` block present with minimum required scopes
-- [ ] All third-party actions pinned to full commit SHA
-- [ ] `concurrency:` group configured (for PR-triggered workflows)
-- [ ] `timeout-minutes:` set on every job
-- [ ] No secrets hardcoded in YAML
-- [ ] Environment variables scoped correctly: job-only vars under `jobs.<id>.env:`, multi-job vars under workflow-level `env:`
-- [ ] YAML anchors (`&`) and aliases (`*`) used to eliminate duplication where env blocks or job configurations are shared across jobs
-- [ ] `actions/cache` used for dependency caching where applicable
-- [ ] Environment protection rules configured for deployment jobs
-
-**Spring / Java workflows (apply when applicable):**
-
-- [ ] `actions/setup-java@v4` used with explicit `distribution` (prefer `temurin`), `java-version`, and `cache` parameter (`maven` or `gradle`)
-- [ ] Maven builds use `--batch-mode --update-snapshots` flags
-- [ ] Gradle builds use `gradle/actions/setup-gradle` (SHA-pinned) instead of bare `./gradlew`
-- [ ] Maven wrapper (`./mvnw`) used instead of `mvn` when wrapper is present in repo
-- [ ] Container images use Spring Boot buildpacks (`spring-boot:build-image` / `bootBuildImage`) or `docker/build-push-action` — not raw `docker build` shell commands
-- [ ] Test results published via `dorny/test-reporter` or `mikepenz/action-junit-report` (SHA-pinned) from `target/surefire-reports/` or `build/test-results/`
+For every workflow file written, verify against the checklist in `prompts/references/ci-cd-best-practices.md` (section: "Verification Checklist"). All items must pass.
 
 ### Post-Migration GitHub Issue Creation
 

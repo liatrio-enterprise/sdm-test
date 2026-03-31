@@ -24,13 +24,9 @@ The marker for this instruction is:  SDM2️⃣
 
 ## You are here in the workflow
 
-This is **Step 2** — transforming the discovery inventory into a migration specification. The spec you produce here is the single source of truth for the rest of the workflow: SDM-3 derives tasks from it, SDM-4 implements against it, and SDM-5 validates parity using it as acceptance criteria.
+**Step 2 of 5.** Transform the discovery inventory into a migration specification — the single source of truth for tasks (SDM-3), implementation (SDM-4), and validation (SDM-5).
 
-**What matters most in this spec:**
-- **Platform Delta Analysis** — drives every migration task; gaps here mean gaps in the migration
-- **CI/CD Best Practices** — set the quality bar; without them you're just copying bad patterns
-- **Secrets Inventory** — informs post-migration credential configuration
-- **Appropriate scope** — oversized specs lead to unmanageable task breakdowns
+**Depends on:** SDM-1 discovery report → **Produces for:** SDM-3 (task generation)
 
 ## Your Role
 
@@ -57,85 +53,57 @@ Look for the discovery report in `./docs/specs/[NN]-migration-[pipeline-name]/[N
 
 ## Step 2: Clarifying Questions
 
-Ask clarifying questions to gather detail not available from the Jenkinsfile alone. Focus on understanding the desired target state and organizational constraints.
+Ask clarifying questions to gather detail not available from the Jenkinsfile alone. Questions are organized by priority — ask **Tier 1** questions first (these block spec generation), then add **Tier 2** questions based on what the discovery report detected.
 
-### Question Focus Areas
+### Tier 1 — Must Answer Before Spec (always ask)
 
-**Target State:**
+**Target State & Boundaries:**
 
 - Is this a 1:1 translation or an opportunity to improve the pipeline?
 - What runner strategy is preferred (GitHub-hosted, self-hosted, larger runners)?
-- Should GitHub-native features be adopted (Environments, OIDC, Dependency Review)?
-- Are there new requirements not in the current Jenkins pipeline?
-
-**Secrets & Security:**
-
 - How are credentials currently managed (Jenkins credential store, external vault, cloud IAM)?
 - Is OIDC federation desired for cloud provider authentication?
-- Are there compliance requirements for secret rotation or audit logging?
-- What branch protection rules should be enforced?
-
-**SCOM Application Details (if SCOM pipeline detected):**
-
-- What are the deployment server details? For each environment (dev, qa, staging, prod):
-  - Server hostname(s), SSH user, deploy path, WAR file name, and health check URL
-- What is the OIDC provider name and audience for JFrog Artifactory? (e.g., `soa-scom-github`)
-- What is the JFrog Maven repository prefix? (e.g., `scom-mvn`, `snet-mvn`)
-- Should Maven artifacts be published to JFrog on dev builds? (`maven-deploy`)
-- What environments are in the promotion chain? (e.g., dev → qa → staging → prod)
-- Should any non-dev environment create a Git tag/GitHub release? (`create-release`)
-
-**SCOM Docker/AWS Application Details (if Docker/AWS deployment detected):**
-
-- What AWS account IDs are used per environment? (dev, qa, preprod, prod)
-- What IAM role ARN should GitHub Actions assume via OIDC for each account?
-- What ECR registry URL should images be pushed to?
-- What ECS cluster and service names are used per environment? (if deploying to ECS)
-- What Lambda function names need to be updated? (if deploying Lambda functions)
-- What Maven profile is used for Lambda packaging? (e.g., `-Paws-lambda`)
-- What is the ECS task definition file location? (default: `task-definition.json`)
-- What is the container name in the ECS task definition?
-- Is there a health check URL for the deployed service?
-- What is the OIDC provider name and audience for JFrog Artifactory?
-- What is the JFrog Maven repository prefix?
-- What environments are in the promotion chain? (e.g., dev → qa → preprod → prod)
-
-**Existing Reusable Components:**
-
-- Do you have any existing GitHub Actions composite actions or reusable workflows that this pipeline should use?
-- If so, please provide the paths or repository references so they can be incorporated
-- **Note:** For SCOM applications deploying WAR files to Tomcat, use `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml`. For SCOM applications deploying Docker containers to AWS (ECS/Lambda), use `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml`. No new reusable workflow needs to be created for either case.
-
-**Reusable Workflow Placement (if non-SCOM shared libraries are involved):**
-
-- If the Jenkinsfile calls non-SCOM shared libraries, the library logic will become reusable workflow(s). Where should these live?
-  - (A) In the application repository alongside the calling workflow
-  - (B) In a dedicated shared-workflows repository (provide repo name)
-  - (C) In an organization-level `.github` repository
-  - (D) Other (describe)
-
-**Migration Boundaries:**
-
 - What should explicitly NOT change during this migration?
 - Are there dependent systems that must not be disrupted?
+- Do you have any existing GitHub Actions composite actions or reusable workflows this pipeline should use?
+
+### Tier 2 — Conditional (ask based on discovery report type)
+
+**If SCOM Java pipeline detected** (Jenkinsfile calls `scomAppPipeline()`):
+
+- Deployment server details per environment (hostname, SSH user, deploy path, WAR name, health check URL)
+- OIDC provider name and audience for JFrog Artifactory (e.g., `soa-scom-github`)
+- JFrog Maven repository prefix (e.g., `scom-mvn`, `snet-mvn`)
+- Should Maven artifacts be published on dev builds? (`maven-deploy`)
+- Environment promotion chain (e.g., dev → qa → staging → prod)
+- Should any non-dev environment create a Git tag/GitHub release? (`create-release`)
+
+**Note:** For SCOM Java apps, the reusable workflow already exists — no new one is needed.
+
+**If Docker/AWS deployment detected** (Dockerfile + AWS infrastructure):
+
+- AWS account IDs and IAM role ARNs per environment
+- ECR registry URL for Docker image push
+- ECS cluster/service names per environment (if ECS)
+- Lambda function names (if Lambda) and Maven profile for Lambda packaging
+- ECS task definition file location and container name
+- Health check URL for the deployed service
+- OIDC provider/audience for JFrog and Maven repository prefix
+- Environment promotion chain (e.g., dev → qa → preprod → prod)
+
+**Note:** For Docker/AWS apps, the reusable workflow already exists — no new one is needed.
+
+**If non-SCOM shared libraries detected** (`@Library` calling non-SCOM libraries):
+
+- Where should reusable workflow(s) live? (A) Application repo, (B) Dedicated shared-workflows repo, (C) Organization `.github` repo, (D) Other
+
+### Tier 3 — Can Answer During Spec Review
+
+- Should GitHub-native features be adopted (Environments, OIDC, Dependency Review)?
+- Are there compliance requirements for secret rotation or audit logging?
+- What branch protection rules should be enforced?
 - Are there frozen periods or change windows to respect?
-
-### Questions File Format
-
-```markdown
-# [NN] Questions Round [N] — [Pipeline Name]
-
-Please answer each question below. Feel free to add additional context under any question.
-
-## 1. [Question Category]
-
-[What specific aspect needs clarification?]
-
-- [ ] (A) [Option description]
-- [ ] (B) [Option description]
-- [ ] (C) [Option description]
-- [ ] (D) Other (describe)
-```
+- Are there new requirements not in the current Jenkins pipeline?
 
 ### Questions File Process
 
@@ -151,55 +119,9 @@ Please answer each question below. Feel free to add additional context under any
 
 Generate the migration specification using the structure below. Every section is mandatory unless explicitly marked optional.
 
-### Embedded Platform Delta Reference
+### Platform Delta Reference
 
-Use this reference table when mapping Jenkins concepts to GitHub Actions equivalents. This is your authoritative source for platform differences:
-
-| Jenkins Concept | GHA Equivalent | Key Differences |
-|---|---|---|
-| `pipeline { stages {} }` | `jobs:` in workflow YAML | Stages are sequential by default; GHA jobs are parallel by default |
-| `stage('Name') { steps {} }` | `jobs.<id>.steps:` | Each Jenkins stage typically becomes a GHA job or logical step group |
-| `agent any` | `runs-on: ubuntu-latest` | GHA runners are ephemeral; no persistent workspace |
-| `agent { docker { image 'x' } }` | `container: image: x` or `runs-on:` with container | Container jobs vs container actions — different scoping |
-| `agent { label 'x' }` | `runs-on: [self-hosted, x]` | Requires self-hosted runner infrastructure |
-| `agent { kubernetes {} }` | Actions Runner Controller (ARC) | Significant infrastructure; consider GitHub-hosted first |
-| `agent none` | Per-job `runs-on:` | Each stage must declare its own runner |
-| `parameters { string(...) }` | `workflow_dispatch: inputs:` | Only available for manual triggers; no equivalent for automated |
-| `when { branch 'main' }` | `on: push: branches: [main]` or `if:` | Trigger-level vs job/step-level filtering |
-| `when { expression { ... } }` | `if: ${{ expression }}` | Groovy expressions → GitHub Actions expression syntax |
-| `post { always {} }` | `if: always()` on step/job | Per-step or per-job; no global post block |
-| `post { success {} }` | `if: success()` | Default behavior — steps only run on success |
-| `post { failure {} }` | `if: failure()` | Must be explicitly added to each relevant step |
-| `post { cleanup {} }` | `if: always()` on final step | No native cleanup block; use always() on last step |
-| `parallel { a {...} b {...} }` | Multiple jobs without `needs:` | GHA jobs are parallel by default; use `needs:` for sequencing |
-| `input { message '...' }` | Environment protection rules | Different UX — environment-based approval with required reviewers |
-| `withCredentials([...])` | `${{ secrets.NAME }}` + env vars | No block scoping; secrets available to entire job unless using environments |
-| `credentials('id')` in env | `env: VAR: ${{ secrets.NAME }}` | Direct mapping but different scoping model |
-| `environment {}` block (stage) | `jobs.<id>.env:` or top-level `env:` | Env vars used by only one job belong at job level; env vars shared across multiple jobs belong at workflow level |
-| `stash/unstash` | `actions/upload-artifact` + `actions/download-artifact` | Cross-job artifact sharing; artifacts persist after workflow |
-| `archiveArtifacts` | `actions/upload-artifact@v4` | Different retention policies; default 90 days in GHA |
-| `Jenkins workspace` | Ephemeral runner workspace | State does NOT persist between jobs; use artifacts or cache |
-| `@Library('name')` | Reusable workflows / Composite actions | See shared library migration section |
-| `Multibranch Pipeline` | `on: push` / `on: pull_request` with branch filters | GHA natively handles multi-branch via trigger configuration |
-| `cron('H/15 * * * *')` | `schedule: - cron: '*/15 * * * *'` | No `H` hash syntax in GHA; use exact cron times |
-| `lock('resource')` | `concurrency: group: name` | GHA uses concurrency groups; `cancel-in-progress` option available |
-| `timeout(time: 30, unit: 'MINUTES')` | `timeout-minutes: 30` | Per-job or per-step in GHA |
-| `retry(3) { ... }` | No native equivalent | Use custom retry logic or third-party action |
-| `build job: 'downstream'` | `workflow_dispatch` event + API trigger | Less tightly coupled than Jenkins upstream/downstream |
-| `currentBuild.result` | `${{ job.status }}` | `success`, `failure`, `cancelled` |
-| `sh 'command'` / `bat 'command'` | `run: command` | `shell: bash` (default on Linux), `shell: pwsh` on Windows |
-| `emailext` | `dawidd6/action-send-mail` | Third-party action; no native email |
-| `slackSend` | `slackapi/slack-github-action` | Official Slack action available |
-| `withSonarQubeEnv` | `sonarsource/sonarqube-scan-action` | Official SonarQube action |
-| `cleanWs()` / `deleteDir()` | Not needed — runners are ephemeral | Workspace is automatically cleaned |
-| `buildDiscarder` / `logRotator` | Workflow run retention settings | Configure in repo settings or via API |
-| `Jenkinsfile` in repo root | `.github/workflows/*.yml` | Multiple workflow files; naming convention matters |
-| `tool 'JDK-17'` / `jdk` agent option | `actions/setup-java@v4` with `distribution` + `java-version` | Specify distribution (e.g., `temurin`); supports caching via `cache: maven` or `cache: gradle` |
-| `mvn` / `./mvnw` in `sh` steps | `actions/setup-java` + `run: ./mvnw --batch-mode verify` | Use `--batch-mode --update-snapshots` for CI; prefer `mvnw` for version consistency |
-| `./gradlew` in `sh` steps | `gradle/actions/setup-gradle` + `run: ./gradlew build` | Action manages caching and daemon lifecycle; pin to SHA |
-| Maven `settings.xml` via `configFileProvider` | `actions/setup-java` `server-id` / `server-username` / `server-password` | Auto-generates `~/.m2/settings.xml`; no config file plugin needed |
-| `docker.build()` / `docker.push()` | `docker/build-push-action` + `docker/login-action` | Or use Spring Boot buildpacks: `mvn spring-boot:build-image` / `./gradlew bootBuildImage` |
-| `junit '**/target/surefire-reports/*.xml'` | `dorny/test-reporter` or `mikepenz/action-junit-report` | Publishes test results as PR check annotations |
+For the full Jenkins-to-GitHub Actions concept mapping table, read `prompts/references/platform-delta-reference.md`. Use it when populating the Platform Delta Analysis section of the spec.
 
 ### Output Type Rule
 
@@ -211,327 +133,21 @@ Use this reference table when mapping Jenkins concepts to GitHub Actions equival
 
 ### SCOM Caller Workflow Architecture
 
-For SCOM application migrations, the spec should define a **caller workflow** that passes application-specific parameters to the reusable workflow. The reusable workflow handles all build, deploy, and notification logic — the caller workflow only provides configuration.
+For SCOM Java application migrations, the spec should define a **caller workflow** that passes application-specific parameters to the reusable workflow. The reusable workflow handles all build, deploy, and notification logic — the caller workflow only provides configuration.
 
-**Reusable workflow reference:**
-```
-SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-```
-
-**Reusable workflow inputs:**
-
-| Input | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `environment` | string | yes | — | Target environment (dev, qa, staging, prod). Build steps only run for dev. |
-| `java-version` | string | no | `'21'` | JDK version |
-| `java-distribution` | string | no | `'corretto'` | JDK distribution |
-| `container` | string | yes | — | Logical container name (used in concurrency groups) |
-| `deploy` | boolean | no | `true` | Enable deployment stages |
-| `servers` | string | yes | — | JSON array of server targets (see format below) |
-| `maven-deploy` | boolean | no | `false` | Enable Maven artifact publishing to JFrog |
-| `oidc-provider-name` | string | yes | — | OIDC provider name in JFrog Artifactory |
-| `oidc-audience` | string | yes | — | OIDC audience value in JFrog Artifactory |
-| `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`) |
-| `create-release` | boolean | no | `false` | Create Git tag and GitHub release after deploy |
-| `version` | string | no | `''` | App version (required for non-dev environments) |
-| `health-check-timeout` | string | no | `'60'` | Seconds to wait for health check |
-
-**Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
-
-**Required permissions:** `contents: write`, `id-token: write` (plus `checks: write` and `pull-requests: write` if PR-triggered)
-
-**Reusable workflow outputs:** `version` — resolved application version (from Maven build in dev, from input in non-dev)
-
-**Server JSON format:**
-```json
-[
-  {
-    "host": "hostname",
-    "user": "deploy-user",
-    "port": "22",
-    "path": "/deploy/path",
-    "war-name": "app.war",
-    "health-check-url": "http://hostname:port/endpoint"
-  }
-]
-```
-
-**Reference caller workflows (use as templates):**
-
-Single-environment (dev only):
-```yaml
-name: Dev Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main]
-permissions:
-  contents: write
-  id-token: write
-  checks: write
-  pull-requests: write
-jobs:
-  dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: dev
-      java-version: '21'
-      java-distribution: corretto
-      container: b2capi
-      deploy: true
-      maven-deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      health-check-timeout: '60'
-      servers: |
-        [
-          {
-            "host": "server1.example.com",
-            "user": "deployer",
-            "path": "/tmp",
-            "war-name": "app.war",
-            "health-check-url": "http://server1:8080/actuator/health"
-          }
-        ]
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-```
-
-Multi-environment with promotion chain (dev → qa):
-```yaml
-name: CI/CD Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [develop]
-jobs:
-  build-deploy-dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: dev
-      java-version: '8'
-      container: serv
-      deploy: true
-      maven-deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      servers: |
-        [
-          { "host": "server1", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server1:8080/serv/version" },
-          { "host": "server2", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server2:8080/serv/version" }
-        ]
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-
-  deploy-qa:
-    needs: build-deploy-dev
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: qa
-      container: serv
-      deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      create-release: true
-      version: ${{ needs.build-deploy-dev.outputs.version }}
-      servers: |
-        [...]
-    secrets: inherit
-```
-
-**Key patterns for the caller workflow:**
-- Dev job builds from source (`environment: dev`) — the reusable workflow runs Maven build only for dev
-- Non-dev jobs skip the build and use `version` from the dev job's output
-- Non-dev jobs chain via `needs:` to enforce promotion order
-- `secrets: inherit` can be used for chained jobs in the same workflow
-- Multi-server deployments pass multiple entries in the `servers` JSON array
+For the full parameter table, server JSON format, and reference caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline").
 
 ### SCOM Docker Pipeline Architecture
 
-For SCOM applications that deploy as Docker containers to AWS, the spec should define a **caller workflow** that passes application-specific parameters to the Docker pipeline reusable workflow. This workflow handles Maven build, Docker image build/push to ECR, and deployment to ECS and/or Lambda.
+For SCOM Docker/AWS applications, the spec should define a **caller workflow** that passes application-specific parameters to the Docker pipeline reusable workflow. The reusable workflow handles Maven build, Docker image build/push to ECR, and AWS deployment.
 
-**Reusable workflow reference:**
-```
-SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-```
+For the full parameter table and reference caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Docker/AWS Pipeline").
 
-**Key reusable workflow inputs:**
-
-| Input | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `environment` | string | yes | — | Target environment (dev, qa, staging, prod). Build steps only run for dev. |
-| `container` | string | yes | — | Logical container/app name (ECR repo name, concurrency key) |
-| `java-version` | string | no | `'8'` | JDK version |
-| `aws-role-arn` | string | yes | — | IAM role ARN for OIDC authentication to AWS |
-| `aws-region` | string | no | `'us-east-1'` | AWS region |
-| `ecr-registry` | string | yes | — | ECR registry URL |
-| `deploy-ecs` | boolean | no | `true` | Enable ECS/Fargate deployment |
-| `ecs-cluster` | string | no | — | ECS cluster name |
-| `ecs-service` | string | no | — | ECS service name |
-| `ecs-task-definition` | string | no | `'task-definition.json'` | Path to ECS task definition JSON |
-| `ecs-container-name` | string | no | — | Container name in task definition |
-| `deploy-lambda` | boolean | no | `false` | Enable Lambda function deployment |
-| `lambda-function-names` | string (JSON) | no | `'[]'` | JSON array of Lambda function names to update |
-| `lambda-maven-profile` | string | no | `'aws-lambda'` | Maven profile for Lambda packaging |
-| `oidc-provider-name` | string | yes | — | OIDC provider name for JFrog |
-| `oidc-audience` | string | yes | — | OIDC audience for JFrog |
-| `repository-prefix` | string | yes | — | JFrog Maven repo prefix |
-| `health-check-url` | string | no | — | Health check URL for deployed service |
-| `version` | string | no | `''` | App version (required for non-dev environments) |
-
-**Required secrets:** `TEAMS_WEBHOOK_URL` (optional)
-
-**Required permissions:** `contents: write`, `id-token: write`
-
-**Reusable workflow outputs:** `version` (resolved app version), `image-uri` (ECR image URI)
-
-**Reference caller workflow (Docker/AWS single-environment):**
-```yaml
-name: Dev Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main]
-permissions:
-  contents: write
-  id-token: write
-jobs:
-  dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-    with:
-      environment: dev
-      container: assetmanager
-      java-version: '8'
-      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
-      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
-      deploy-ecs: true
-      ecs-cluster: scom-dev
-      ecs-service: assetmanager
-      ecs-container-name: assetmanager
-      deploy-lambda: true
-      lambda-function-names: '["SQSMessageHandlerStore", "SQSMessageHandlerRetrieve"]'
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      health-check-url: http://assetmanager-dev:8088/actuator/health
-    secrets:
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-```
-
-**Multi-environment with promotion chain (Docker/AWS):**
-```yaml
-name: CI/CD Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main]
-jobs:
-  build-deploy-dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-    with:
-      environment: dev
-      container: assetmanager
-      java-version: '8'
-      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
-      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
-      deploy-ecs: true
-      ecs-cluster: scom-dev
-      ecs-service: assetmanager
-      ecs-container-name: assetmanager
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-    secrets:
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-
-  deploy-qa:
-    needs: build-deploy-dev
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
-    with:
-      environment: qa
-      container: assetmanager
-      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
-      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
-      deploy-ecs: true
-      ecs-cluster: scom-qa
-      ecs-service: assetmanager
-      ecs-container-name: assetmanager
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      version: ${{ needs.build-deploy-dev.outputs.version }}
-    secrets: inherit
-```
-
-**Key patterns for Docker/AWS caller workflows:**
-- Dev job builds from source, builds Docker image, pushes to ECR — the reusable workflow runs Maven build and Docker build only for dev
-- Non-dev jobs skip the build and use `version` from the dev job's output to resolve the image URI
-- Non-dev jobs chain via `needs:` to enforce promotion order
-- Each environment may use a different AWS account and IAM role ARN
-- Lambda function names are passed as a JSON array for batch updates
-- `secrets: inherit` can be used for chained jobs in the same workflow
-
-**Jenkins-to-reusable-workflow parameter mapping:**
-
-| Jenkins `scomAppPipeline()` Param | Reusable Workflow Input | Transformation |
-|---|---|---|
-| `container: 'name'` | `container: name` | Direct mapping |
-| `jdk: 'java-8'` | `java-version: '8'` | Strip `java-` prefix |
-| `deploy: true/false` | `deploy: true/false` | Direct mapping |
-| `context: '/path'` | Part of `health-check-url` in `servers` JSON | Combine with host and port |
-| `enabled: true` | `deploy: true` | Rename |
-| (not in Jenkins) | `oidc-provider-name`, `oidc-audience` | New — ask user for OIDC config |
-| (not in Jenkins) | `repository-prefix` | New — ask user for JFrog repo prefix |
-| (not in Jenkins) | `servers` JSON | New — ask user for server details (host, user, path, war-name, health-check-url) |
+**Jenkins-to-reusable-workflow parameter mapping:** See `prompts/references/scom-app-pipeline-reference.md` (section: "Jenkins-to-Reusable-Workflow Parameter Mapping").
 
 ### CI/CD Best Practices (Enforced Requirements)
 
-The migration spec MUST incorporate these best practices in the target architecture. These are not optional — they represent the baseline quality bar for the migrated workflows:
-
-**Security:**
-
-- **Permissions block**: Every workflow MUST include `permissions:` with minimum required scopes. Default to `contents: read` and only add write permissions where explicitly needed
-- **Action pinning**: All third-party actions MUST be pinned to full commit SHA, not tags or branches (e.g., `uses: actions/checkout@abc123def456` not `@v4`)
-- **OIDC over stored credentials**: For cloud provider access (AWS, Azure, GCP), prefer OIDC federation over long-lived access keys. Use `aws-actions/configure-aws-credentials` with `role-to-assume` and OIDC
-- **Fork PR security**: Never use `pull_request_target` with checkout of fork code in a privileged context
-- **Log masking**: Use `::add-mask::` for any dynamically generated sensitive values
-- **GITHUB_TOKEN scoping**: Prefer `GITHUB_TOKEN` over PATs; scope to minimum permissions
-
-**Efficiency:**
-
-- **Environment variable scoping**: Hoist environment variables to the narrowest scope that covers all usage. If an env var is used by a single job, define it under that job's `env:` key. If the same env var appears in multiple jobs, promote it to the workflow-level `env:` block. Never duplicate the same env var across multiple jobs when a workflow-level declaration suffices
-- **Caching**: Use `actions/cache` for package manager dependencies (npm, pip, maven, gradle). Define cache keys based on lockfile hashes
-- **Concurrency groups**: Use `concurrency:` to prevent duplicate workflow runs. Set `cancel-in-progress: true` for PR workflows
-- **Matrix builds**: Use `strategy.matrix` for multi-version or multi-platform testing instead of duplicating jobs
-- **YAML anchors and aliases**: Use YAML anchors (`&`) to define reusable content and aliases (`*`) to reference it elsewhere in the workflow. Use anchors to share environment variable blocks across jobs (`env: &env_vars` / `env: *env_vars`) and to reuse entire job configurations (`&base_job` / `*base_job`). This reduces duplication and keeps workflows maintainable. See: [GitHub Docs — YAML anchors and aliases](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations#yaml-anchors-and-aliases)
-- **Reusable workflows**: Extract shared logic into reusable workflows (`.github/workflows/reusable-*.yml`) called with `workflow_call`
-- **Composite actions**: Create repo-local composite actions in `.github/actions/[name]/action.yml` for repeated step sequences
-
-**Reliability:**
-
-- **Environment protection rules**: Configure required reviewers and deployment branches for production environments
-- **Branch protection**: Require status checks to pass before merging; protect workflow files from unauthorized changes
-- **Immutable artifacts**: Upload build artifacts with `actions/upload-artifact@v4`; use content-addressable names where possible
-- **Timeout configuration**: Set `timeout-minutes` on every job to prevent runaway builds
-
-**Spring / Java Application Patterns (apply when the pipeline builds a Java/Spring project):**
-
-- **JDK setup**: Use `actions/setup-java@v4` with explicit `java-version`, `distribution` (prefer `temurin`), and `cache` parameter. Set `cache: maven` for Maven projects or `cache: gradle` for Gradle projects — this replaces manual `actions/cache` configuration for dependencies
-- **Maven builds**: Run with `--batch-mode --update-snapshots` flags in CI (e.g., `mvn --batch-mode --update-snapshots verify`). `--batch-mode` suppresses interactive prompts and produces cleaner logs; `--update-snapshots` ensures SNAPSHOT dependencies are current
-- **Gradle builds**: Use the `gradle/actions/setup-gradle` action (SHA-pinned) instead of invoking `./gradlew` directly — it provides caching, build scan integration, and daemon management. Ensure Gradle daemons are stopped before workflow completion to avoid cache file locks (`./gradlew --stop` or use `setup-gradle`'s built-in daemon management)
-- **Maven wrapper**: If the project includes `mvnw`, use `./mvnw` instead of `mvn` to ensure build reproducibility with the exact Maven version the project specifies
-- **Multi-JDK testing**: Use `strategy.matrix` with `java-version: ['17', '21']` (or project-relevant versions) to test across JDK versions in parallel
-- **Artifact uploads**: Maven outputs to `target/`, Gradle to `build/libs/`. Upload JARs/WARs with `actions/upload-artifact@v4` using content-addressable names (e.g., include `${{ github.sha }}`)
-- **Container images**: For Spring Boot apps, prefer Spring Boot's built-in buildpack support (`mvn spring-boot:build-image` / `./gradlew bootBuildImage`) over manual Dockerfiles when possible — it produces OCI-compliant, layered images without requiring a Dockerfile. When a Dockerfile is needed, use `docker/build-push-action` with `docker/login-action` for registry authentication
-- **Container registry**: Use `ghcr.io` with `GITHUB_TOKEN` for GitHub Container Registry (requires `packages: write` permission), or configure external registries (Docker Hub, ECR, GCR, ACR) via their respective login actions
-- **Package publishing**: For Maven Central publishing, use `actions/setup-java@v4` with `server-id`, `server-username`, and `server-password` parameters to configure `~/.m2/settings.xml` automatically. For GitHub Packages, use the `GITHUB_TOKEN` with `packages: write` permission
-- **Test reporting**: Use `dorny/test-reporter` or `mikepenz/action-junit-report` (SHA-pinned) to publish JUnit XML results from `target/surefire-reports/` (Maven) or `build/test-results/` (Gradle) as PR check annotations
-- **Build attestation**: For container images, use `actions/attest-build-provenance` to generate SLSA provenance attestations for supply chain security
+The migration spec MUST incorporate the best practices defined in `prompts/references/ci-cd-best-practices.md`. These are not optional — they represent the baseline quality bar for the migrated workflows. Include them in the Target Architecture section of the spec.
 
 ### Migration Spec Template
 

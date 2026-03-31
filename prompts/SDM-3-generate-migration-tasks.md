@@ -24,12 +24,9 @@ The marker for this instruction is:  SDM3️⃣
 
 ## You are here in the workflow
 
-This is **Step 3** — breaking the migration spec into ordered, implementable tasks. The task list you produce here is what SDM-4 executes against and SDM-5 validates against. Task ordering matters because CI/CD migrations have real dependency chains (you can't test a pipeline that doesn't have a workflow file yet), and proof artifacts matter because they're the evidence base for validation.
+**Step 3 of 5.** Break the migration spec into ordered, implementable tasks that SDM-4 executes against and SDM-5 validates.
 
-**Key relationships:**
-- **Parent tasks** → become implementation checkpoints and commit boundaries in SDM-4
-- **Proof artifacts** → become the evidence base for SDM-5 validation
-- **Task ordering** → wrong order means broken dependencies during execution
+**Depends on:** SDM-2 migration spec → **Produces for:** SDM-4 (execution)
 
 ## Your Role
 

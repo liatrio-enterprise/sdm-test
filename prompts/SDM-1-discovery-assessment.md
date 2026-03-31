@@ -24,15 +24,9 @@ The marker for this instruction is:  SDM1️⃣
 
 ## You are here in the workflow
 
-This is **Step 1** of the Spec-Driven Migration Workflow. The discovery report you produce here becomes the factual foundation for the entire migration — the spec, tasks, implementation, and validation all trace back to this inventory. If something is missed here, it will be missed downstream.
+**Step 1 of 5.** Produce a comprehensive pipeline/application inventory that becomes the factual foundation for the entire migration.
 
-**Key outputs and who consumes them:**
-
-- **Pipeline Inventory** → scopes the migration spec (SDM-2)
-- **Plugin Dependency Matrix** → drives GHA equivalent selection (SDM-2)
-- **Credentials Catalog** → informs secrets strategy (SDM-2, post-migration issues)
-- **Agent/Runner Mapping** → determines infrastructure requirements (SDM-2)
-- **Shared Library Catalog** → guides reusable workflow decisions (SDM-2, SDM-3)
+**Depends on:** User-provided Jenkinsfile or application repository → **Produces for:** SDM-2 (migration spec)
 
 ### Output Type Rule
 
@@ -46,96 +40,21 @@ The migration output type depends on the source — classify early so the discov
 
 ### SCOM Reusable Workflow Reference
 
-When the migration target is the SCOM reusable workflow, discovery should focus on extracting parameters that map to the reusable workflow's inputs. The reusable workflow lives at:
+When the migration target is the SCOM reusable workflow, discovery should focus on extracting parameters that map to the reusable workflow's inputs. For the full parameter table, server JSON format, and caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Discovery Extraction Guide").
 
+The reusable workflow lives at:
 ```
 SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
 ```
 
-**Reusable workflow inputs to map during discovery:**
-
-| Input | Type | Required | Default | What to extract from Jenkins |
-|---|---|---|---|---|
-| `environment` | string | yes | — | Target environment (dev, qa, staging, prod) |
-| `java-version` | string | no | `'21'` | JDK version from `jdk` parameter or `tool` directive |
-| `java-distribution` | string | no | `'corretto'` | JDK distribution (usually corretto for SCOM) |
-| `container` | string | yes | — | Logical container/app name from `container` parameter |
-| `deploy` | boolean | no | `true` | Whether deployment is enabled |
-| `servers` | string (JSON) | yes | — | Server targets — host, user, path, war-name, health-check-url |
-| `maven-deploy` | boolean | no | `false` | Whether to publish artifacts to JFrog |
-| `oidc-provider-name` | string | yes | — | OIDC provider name for JFrog (e.g., `soa-scom-github`) |
-| `oidc-audience` | string | yes | — | OIDC audience for JFrog (e.g., `soa-scom-github`) |
-| `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`) |
-| `create-release` | boolean | no | `false` | Whether to create Git tag and GitHub release |
-| `version` | string | no | `''` | App version (required for non-dev environments) |
-| `health-check-timeout` | string | no | `'60'` | Seconds to wait for health check |
-
-**Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
-
-**Required permissions:** `contents: write`, `id-token: write`
-
-During discovery for SCOM apps, extract:
-1. The `container` name and any `context` path from the shared library call
-2. The JDK version (translate Jenkins format: `java-8` → `'8'`, `java-21` → `'21'`)
-3. Server hostnames, users, deploy paths, WAR file names, and health check URLs from deployment configuration
-4. Whether Maven artifact publishing is enabled
-5. The environment promotion chain (dev → qa → staging → prod)
-
 ### SCOM Docker Pipeline Reference
 
-When the target is an application that deploys as Docker containers to AWS (ECS/Fargate) and/or Lambda functions, discovery should focus on extracting parameters that map to the Docker pipeline's inputs. The reusable workflow lives at:
+When the target is a Docker/AWS application, discovery should focus on extracting parameters that map to the Docker pipeline's inputs. For the full parameter table, composite actions, and discovery extraction guide, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Docker/AWS Pipeline" → "Discovery Extraction Guide").
 
+The reusable workflow lives at:
 ```
 SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
 ```
-
-**Reusable workflow inputs to map during discovery:**
-
-| Input | Type | Required | Default | What to extract from application |
-|---|---|---|---|---|
-| `environment` | string | yes | — | Target environment (dev, qa, staging, prod) |
-| `container` | string | yes | — | Logical container/app name (used for ECR repo name and concurrency) |
-| `java-version` | string | no | `'8'` | JDK version from pom.xml or Dockerfile |
-| `java-distribution` | string | no | `'corretto'` | JDK distribution |
-| `dockerfile` | string | no | `'Dockerfile'` | Path to Dockerfile |
-| `aws-role-arn` | string | yes | — | IAM role ARN for OIDC authentication |
-| `aws-region` | string | no | `'us-east-1'` | AWS region |
-| `ecr-registry` | string | yes | — | ECR registry URL (e.g., `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
-| `deploy-ecs` | boolean | no | `true` | Whether to deploy to ECS/Fargate |
-| `ecs-cluster` | string | no | — | ECS cluster name |
-| `ecs-service` | string | no | — | ECS service name |
-| `ecs-task-definition` | string | no | `'task-definition.json'` | Path to ECS task definition JSON |
-| `ecs-container-name` | string | no | — | Container name in task definition |
-| `deploy-lambda` | boolean | no | `false` | Whether to deploy Lambda functions |
-| `lambda-function-names` | string (JSON) | no | `'[]'` | JSON array of Lambda function names |
-| `lambda-maven-profile` | string | no | `'aws-lambda'` | Maven profile for Lambda packaging |
-| `maven-deploy` | boolean | no | `false` | Whether to publish artifacts to JFrog |
-| `oidc-provider-name` | string | yes | — | OIDC provider name for JFrog |
-| `oidc-audience` | string | yes | — | OIDC audience for JFrog |
-| `repository-prefix` | string | yes | — | JFrog Maven repo prefix |
-| `health-check-url` | string | no | — | Health check URL for the deployed service |
-| `version` | string | no | `''` | App version (required for non-dev environments) |
-
-**Required secrets:** `TEAMS_WEBHOOK_URL` (optional)
-
-**Required permissions:** `contents: write`, `id-token: write`
-
-**Composite actions used by the pipeline:**
-- `SubaruOfAmerica/devops-cicd-actions-maven-build` — Maven build with JFrog OIDC
-- `SubaruOfAmerica/devops-cicd-actions-docker-build` — Docker build and push to ECR
-- `SubaruOfAmerica/devops-cicd-actions-aws-deploy` — ECS/Lambda deployment with OIDC
-
-During discovery for Docker/AWS apps, extract:
-1. The Docker image name (usually matches the application/repo name)
-2. The JDK version from `pom.xml` (`<java.version>`) or Dockerfile (`FROM openjdk:X`)
-3. The Dockerfile location and any build args needed
-4. AWS account IDs and regions per environment
-5. ECS cluster/service names per environment (if deploying to ECS)
-6. Lambda function names (if deploying Lambda functions)
-7. Maven profiles for Lambda packaging (e.g., `-Paws-lambda`)
-8. The environment promotion chain (dev → qa → preprod → prod)
-9. Environment variables and AWS Secrets Manager references
-10. Health check endpoints
 
 ## Your Role
 

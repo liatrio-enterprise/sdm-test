@@ -24,7 +24,9 @@ The marker for this instruction is:  SDM5️⃣
 
 ## You are here in the workflow
 
-This is **Step 5** — the final quality gate. You verify that the GitHub Actions workflows are functionally equivalent to the Jenkins pipelines, all best practices are followed, and post-migration GitHub issues capture all deferred items. The migration spec is your acceptance criteria, and the proof artifacts from SDM-4 are your evidence base.
+**Step 5 of 5.** Final quality gate — verify functional parity, best practices compliance, and post-migration issue completeness.
+
+**Depends on:** SDM-4 implementation + proof artifacts → **Produces for:** Migration sign-off
 
 ## Your Role
 
@@ -120,27 +122,8 @@ For Docker/AWS migrations (greenfield or Jenkins-to-Docker), parity analysis foc
 
 ### Step 3 — Best Practices Audit
 
-For every `.github/workflows/*.yml` file:
+For every `.github/workflows/*.yml` file, validate against the full checklist in `prompts/references/ci-cd-best-practices.md` (section: "Verification Checklist"). Additionally check for Docker/AWS-specific best practices:
 
-1. `permissions:` block present with explicit, minimum scopes
-2. All `uses:` directives pinned to full commit SHA (40-char hex)
-3. `concurrency:` group configured with appropriate `cancel-in-progress` setting
-4. `timeout-minutes:` set on every job
-5. `actions/cache` used for dependency management where applicable
-6. YAML anchors (`&`) and aliases (`*`) used where env blocks or job configurations are repeated across jobs
-7. No `pull_request_target` with fork code checkout in privileged context
-8. No secrets hardcoded in YAML or logs
-9. Application workflows live in the application repo's `.github/workflows/`; reusable workflows live in the location specified by the migration spec's Output Strategy
-
-**Spring / Java workflows (validate when the pipeline builds a Java/Spring project):**
-
-10. `actions/setup-java@v4` used with `distribution`, `java-version`, and `cache` parameter — not manual `actions/cache` configuration
-11. Maven builds use `--batch-mode --update-snapshots` flags
-12. Gradle builds use `gradle/actions/setup-gradle` (SHA-pinned) — not bare `./gradlew` without the setup action
-13. Container images use Spring Boot buildpacks or `docker/build-push-action` — not raw `docker build` shell commands
-14. Test results published via test reporter action (SHA-pinned) — not just console output
-
-**Docker/AWS-Specific Best Practices:**
 - AWS credentials use OIDC federation, not stored access keys
 - ECR image tags include both version and git SHA for traceability
 - ECS task definition includes health checks and log configuration
