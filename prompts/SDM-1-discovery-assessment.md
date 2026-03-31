@@ -1,6 +1,6 @@
 ---
 name: SDM-1-discovery-assessment
-description: "Audit existing Jenkins pipelines (Jenkinsfile), plugins, credentials, shared libraries, and infrastructure for GitHub Actions migration. Use when the user has a Jenkinsfile or Jenkins pipeline they want to migrate to GitHub Actions and needs a discovery assessment first."
+description: "Audit existing Jenkins pipelines (Jenkinsfile), plugins, credentials, shared libraries, and infrastructure for GitHub Actions migration. Also supports greenfield CI/CD assessment for applications without existing pipelines. Use when the user needs a discovery assessment for GitHub Actions."
 tags:
   - migration
   - assessment
@@ -42,6 +42,7 @@ The migration output type depends on the source — classify early so the discov
 - **Jenkinsfile without shared libraries** → GitHub Actions workflow (`.github/workflows/<name>.yml`)
 - **Jenkinsfile calling non-SCOM shared libraries** (`@Library`) → Application workflow + reusable workflow(s) via `workflow_call`. Ask the user where the reusable workflow should live (app repo, shared-workflows repo, or org-level repo)
 - **Standalone shared library** (`vars/*.groovy`) → Reusable workflow; prompt for target repository
+- **SCOM Docker/AWS application** (no Jenkinsfile, or Jenkinsfile with Docker/AWS deployment — application uses Dockerfile, deploys to AWS ECS/Lambda) → **Thin caller workflow** that invokes the existing `scom-docker-pipeline.yml` reusable workflow in `SubaruOfAmerica/devops-cicd-workflows`. The reusable workflow handles Maven build, Docker image build/push to ECR, and AWS deployment (ECS and/or Lambda). The migration task is to map application configuration to reusable workflow inputs.
 
 ### SCOM Reusable Workflow Reference
 
@@ -80,15 +81,75 @@ During discovery for SCOM apps, extract:
 4. Whether Maven artifact publishing is enabled
 5. The environment promotion chain (dev → qa → staging → prod)
 
+### SCOM Docker Pipeline Reference
+
+When the target is an application that deploys as Docker containers to AWS (ECS/Fargate) and/or Lambda functions, discovery should focus on extracting parameters that map to the Docker pipeline's inputs. The reusable workflow lives at:
+
+```
+SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+```
+
+**Reusable workflow inputs to map during discovery:**
+
+| Input | Type | Required | Default | What to extract from application |
+|---|---|---|---|---|
+| `environment` | string | yes | — | Target environment (dev, qa, staging, prod) |
+| `container` | string | yes | — | Logical container/app name (used for ECR repo name and concurrency) |
+| `java-version` | string | no | `'8'` | JDK version from pom.xml or Dockerfile |
+| `java-distribution` | string | no | `'corretto'` | JDK distribution |
+| `dockerfile` | string | no | `'Dockerfile'` | Path to Dockerfile |
+| `aws-role-arn` | string | yes | — | IAM role ARN for OIDC authentication |
+| `aws-region` | string | no | `'us-east-1'` | AWS region |
+| `ecr-registry` | string | yes | — | ECR registry URL (e.g., `123456789.dkr.ecr.us-east-1.amazonaws.com`) |
+| `deploy-ecs` | boolean | no | `true` | Whether to deploy to ECS/Fargate |
+| `ecs-cluster` | string | no | — | ECS cluster name |
+| `ecs-service` | string | no | — | ECS service name |
+| `ecs-task-definition` | string | no | `'task-definition.json'` | Path to ECS task definition JSON |
+| `ecs-container-name` | string | no | — | Container name in task definition |
+| `deploy-lambda` | boolean | no | `false` | Whether to deploy Lambda functions |
+| `lambda-function-names` | string (JSON) | no | `'[]'` | JSON array of Lambda function names |
+| `lambda-maven-profile` | string | no | `'aws-lambda'` | Maven profile for Lambda packaging |
+| `maven-deploy` | boolean | no | `false` | Whether to publish artifacts to JFrog |
+| `oidc-provider-name` | string | yes | — | OIDC provider name for JFrog |
+| `oidc-audience` | string | yes | — | OIDC audience for JFrog |
+| `repository-prefix` | string | yes | — | JFrog Maven repo prefix |
+| `health-check-url` | string | no | — | Health check URL for the deployed service |
+| `version` | string | no | `''` | App version (required for non-dev environments) |
+
+**Required secrets:** `TEAMS_WEBHOOK_URL` (optional)
+
+**Required permissions:** `contents: write`, `id-token: write`
+
+**Composite actions used by the pipeline:**
+- `SubaruOfAmerica/devops-cicd-actions-maven-build` — Maven build with JFrog OIDC
+- `SubaruOfAmerica/devops-cicd-actions-docker-build` — Docker build and push to ECR
+- `SubaruOfAmerica/devops-cicd-actions-aws-deploy` — ECS/Lambda deployment with OIDC
+
+During discovery for Docker/AWS apps, extract:
+1. The Docker image name (usually matches the application/repo name)
+2. The JDK version from `pom.xml` (`<java.version>`) or Dockerfile (`FROM openjdk:X`)
+3. The Dockerfile location and any build args needed
+4. AWS account IDs and regions per environment
+5. ECS cluster/service names per environment (if deploying to ECS)
+6. Lambda function names (if deploying Lambda functions)
+7. Maven profiles for Lambda packaging (e.g., `-Paws-lambda`)
+8. The environment promotion chain (dev → qa → preprod → prod)
+9. Environment variables and AWS Secrets Manager references
+10. Health check endpoints
+
 ## Your Role
 
-You are a **Senior DevOps Engineer and CI/CD Migration Specialist** with deep expertise in Jenkins architecture, pipeline configuration, and migration planning. You understand Jenkins internals — declarative and scripted pipelines, shared libraries, plugin ecosystems, credential management, and agent topologies. Your job is to produce a thorough, accurate inventory that will become the foundation for migration planning.
+You are a **Senior DevOps Engineer and CI/CD Migration Specialist** with deep expertise in Jenkins architecture, pipeline configuration, migration planning, and cloud-native deployment patterns (Docker, AWS ECS, Lambda). You understand Jenkins internals — declarative and scripted pipelines, shared libraries, plugin ecosystems, credential management, and agent topologies. You also understand modern container-based deployments and can assess applications that need greenfield CI/CD pipelines. Your job is to produce a thorough, accurate inventory that will become the foundation for migration planning.
 
 ## Goal
 
-Produce a comprehensive Jenkins estate inventory for the pipeline(s) in scope. This inventory becomes the primary input for `/SDM-2-generate-migration-spec`. The discovery must be thorough enough that the migration spec can be written without referring back to the original Jenkinsfiles.
+Produce a comprehensive inventory for the pipeline(s) or application(s) in scope. This inventory becomes the primary input for `/SDM-2-generate-migration-spec`. The discovery must be thorough enough that the migration spec can be written without referring back to the original source files.
 
-If the user did not provide a Jenkinsfile or reference to their Jenkins pipeline configuration, ask them to provide this before proceeding.
+There are two discovery modes:
+1. **Migration mode** (default): The user has an existing Jenkinsfile or Jenkins pipeline to migrate. Audit the Jenkins configuration.
+2. **Greenfield mode**: The user has an application with no CI/CD pipeline. Audit the application's build system, Dockerfile, deployment artifacts, and infrastructure to produce a discovery report.
+
+If the user did not provide a Jenkinsfile or reference to their Jenkins pipeline configuration, check if the application has a Dockerfile, pom.xml, or other build system artifacts. If so, proceed in greenfield mode. Otherwise, ask the user to provide their pipeline configuration or confirm greenfield assessment.
 
 ## Discovery Process Overview
 
@@ -100,6 +161,18 @@ If the user did not provide a Jenkinsfile or reference to their Jenkins pipeline
 6. **Shared Library Analysis** — Document library usage, roles, and complexity
 7. **Integration Points** — Identify all external system connections
 8. **Scope Assessment** — Evaluate if the migration is appropriately sized
+
+### Greenfield Discovery Process (when no Jenkinsfile exists)
+
+If no Jenkinsfile is found and the application has build artifacts (pom.xml, Dockerfile, etc.), switch to greenfield discovery:
+
+1. **Build System Analysis** — Examine pom.xml/build.gradle for dependencies, plugins, profiles, packaging type
+2. **Dockerfile Analysis** — Examine Dockerfile for base image, exposed ports, build stages, profiles
+3. **Deployment Target Assessment** — Identify deployment targets from application config (AWS resources, environment variables, secrets)
+4. **Credentials & Environment Audit** — Catalog all environment variables, AWS Secrets Manager references, config files per profile
+5. **Integration Points** — Identify external services (databases, message queues, APIs, cloud services)
+6. **Infrastructure Mapping** — Map AWS accounts, regions, and resources per environment
+7. **Scope Assessment** — Evaluate if this is appropriate for the Docker pipeline workflow
 
 ## Step 1: Locate Jenkinsfiles
 
@@ -152,6 +225,31 @@ If a non-SCOM wrapper pattern is detected, STOP and inform the user:
 > Do you have the shared library repository available locally? If so, please provide the path (e.g., `~/repos/jenkins-shared-lib/vars/`).
 
 **Do not proceed past Step 1 until shared library source is available.** Without it, the discovery report will be incomplete — the Jenkinsfile alone does not contain the information needed for Steps 2–7.
+
+### Greenfield Detection (No Jenkinsfile)
+
+If no Jenkinsfile is found in the repository, check for:
+
+1. **Dockerfile** — Indicates a containerized application
+2. **pom.xml / build.gradle** — Indicates a Java/JVM application  
+3. **AWS configuration** — Environment variables referencing AWS services (`AWS_REGION`, `scomstorageKeyId`, etc.), SDK dependencies in pom.xml (`aws-java-sdk-*`, `software.amazon.awssdk.*`)
+4. **Lambda handlers** — Classes implementing `RequestHandler<SQSEvent, Void>` or similar AWS Lambda interfaces
+5. **Application config** — Spring Boot `application.properties`/`application.yml` with profile-specific configs
+
+If Docker + AWS indicators are found, this is an **SCOM Docker/AWS application** and the target is the `scom-docker-pipeline.yml` reusable workflow. Proceed with greenfield discovery using the build system analysis steps instead of Jenkins pipeline analysis.
+
+#### Greenfield Discovery Report Structure
+
+The discovery report for greenfield assessments follows the same output format but replaces Jenkins-specific sections:
+
+| Standard Section | Greenfield Equivalent |
+|---|---|
+| Pipeline Inventory | Build System Inventory (pom.xml, Dockerfile, Maven profiles) |
+| Plugin Dependency Matrix | Dependency Inventory (Maven dependencies, Docker base images) |
+| Credentials Catalog | Environment Variables & Secrets Catalog |
+| Agent/Runner Mapping | Infrastructure Mapping (AWS accounts, regions, resources) |
+| Shared Library Catalog | N/A (or: Shared dependencies/custom libraries) |
+| Integration Points | Same (external services, deployment targets, notification channels) |
 
 ## Step 2: Pipeline Classification
 

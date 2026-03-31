@@ -69,6 +69,17 @@ For SCOM application migrations that produce a caller workflow invoking `scom-ap
 - **GATE G — Environment Chain**: If multi-environment, non-dev jobs use `needs:` to chain after the dev job and pass `version: ${{ needs.<dev-job>.outputs.version }}`.
 - **GATE H — Reusable Workflow Reference**: The `uses:` directive points to `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` (or the appropriate branch/tag).
 
+### SCOM Docker/AWS Caller Workflow Validation (additional checks)
+
+For SCOM Docker/AWS application migrations that produce a caller workflow invoking `scom-docker-pipeline.yml`, also verify:
+
+- **GATE I — AWS OIDC Configuration**: AWS IAM role ARNs are specified per environment and follow OIDC trust policy requirements (the role trusts the GitHub OIDC provider for this repository).
+- **GATE J — ECR Configuration**: ECR registry URL matches the target AWS account. ECR repository exists (or creation is filed as a post-migration issue).
+- **GATE K — ECS Task Definition**: If deploying to ECS, `task-definition.json` is valid JSON with correct container name, port mappings, resource limits, and environment variables. Image placeholder matches the ECR registry/image pattern.
+- **GATE L — Lambda Configuration**: If deploying Lambda functions, all function names in `lambda-function-names` are correct and the Maven profile for Lambda packaging exists in `pom.xml`.
+- **GATE M — Environment Chain (Docker/AWS)**: If multi-environment, non-dev jobs use `needs:` to chain after the dev job, pass `version: ${{ needs.<dev-job>.outputs.version }}`, and use the correct AWS account role ARN for each environment.
+- **GATE N — Reusable Workflow Reference (Docker/AWS)**: The `uses:` directive points to `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main` (or the appropriate branch/tag).
+
 ## Evaluation Rubric (score each 0–3)
 
 Map score to severity: 0→CRITICAL, 1→HIGH, 2→MEDIUM, 3→OK.
@@ -78,6 +89,8 @@ Map score to severity: 0→CRITICAL, 1→HIGH, 2→MEDIUM, 3→OK.
 - **R3 Proof Quality**: Proof artifacts contain meaningful evidence of parity, not just "workflow ran"
 - **R4 Git Traceability**: Commits map to migration tasks with clear progression
 - **R5 Post-Migration Issues**: Post-migration GitHub issues are comprehensive and actionable
+- **R6 AWS Configuration**: (Docker/AWS only) OIDC roles, ECR registries, ECS clusters, and Lambda functions are correctly mapped per environment
+- **R7 Task Definition Quality**: (Docker/AWS only) ECS task definition follows AWS best practices (resource limits, health checks, log configuration)
 
 ## Validation Process
 
@@ -96,6 +109,14 @@ For every Jenkins stage documented in the migration spec:
 2. Locate the proof artifact demonstrating parity
 3. Verify the proof shows equivalent behavior (same artifacts, same test results, same deploy targets)
 4. Mark as **Verified**, **Failed**, or **Unknown**
+
+For Docker/AWS migrations (greenfield or Jenkins-to-Docker), parity analysis focuses on:
+1. Docker image builds successfully from the application's Dockerfile
+2. Image is correctly tagged and pushed to the specified ECR registry
+3. ECS task definition correctly references the container image
+4. Lambda functions (if applicable) are configured with correct function names and Maven profile
+5. Environment promotion chain correctly passes version between jobs
+6. AWS OIDC authentication is properly configured per environment
 
 ### Step 3 — Best Practices Audit
 
@@ -118,6 +139,13 @@ For every `.github/workflows/*.yml` file:
 12. Gradle builds use `gradle/actions/setup-gradle` (SHA-pinned) — not bare `./gradlew` without the setup action
 13. Container images use Spring Boot buildpacks or `docker/build-push-action` — not raw `docker build` shell commands
 14. Test results published via test reporter action (SHA-pinned) — not just console output
+
+**Docker/AWS-Specific Best Practices:**
+- AWS credentials use OIDC federation, not stored access keys
+- ECR image tags include both version and git SHA for traceability
+- ECS task definition includes health checks and log configuration
+- Lambda functions publish versions for rollback capability
+- Each environment uses a separate AWS IAM role (least privilege per account)
 
 ### Step 4 — Coverage Verification
 

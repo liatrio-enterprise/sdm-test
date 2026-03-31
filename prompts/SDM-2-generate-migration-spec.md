@@ -1,6 +1,6 @@
 ---
 name: SDM-2-generate-migration-spec
-description: "Generate a Migration Specification from a Jenkins-to-GitHub Actions discovery report. Produces platform delta analysis, secrets strategy, CI/CD best practices, and output strategy. Use after SDM-1 discovery is complete and you need to plan the migration architecture."
+description: "Generate a Migration Specification from a discovery report (Jenkins migration or greenfield assessment). Produces platform delta analysis, secrets strategy, CI/CD best practices, and output strategy. Use after SDM-1 discovery is complete and you need to plan the migration architecture."
 tags:
   - planning
   - specification
@@ -41,6 +41,8 @@ You are a **Senior Platform Engineer and CI/CD Architect** with deep expertise i
 Create a comprehensive Migration Specification based on the discovery report from `/SDM-1-discovery-assessment`. This spec will serve as the single source of truth for converting Jenkins pipelines to GitHub Actions. The spec must be detailed enough to ensure no functionality is lost and all risks are identified.
 
 If no discovery report exists, instruct the user to run `/SDM-1-discovery-assessment` first. If the user provides a Jenkinsfile directly without a discovery report, you may proceed but note that the assessment may be less thorough.
+
+For **greenfield assessments** (applications without existing CI/CD), the discovery report will contain build system analysis, Dockerfile details, and AWS infrastructure mapping instead of Jenkins pipeline analysis. The spec generation process is the same — adapt the platform delta analysis to map the current manual/ad-hoc deployment process to GitHub Actions.
 
 ## Migration Spec Generation Overview
 
@@ -83,11 +85,26 @@ Ask clarifying questions to gather detail not available from the Jenkinsfile alo
 - What environments are in the promotion chain? (e.g., dev → qa → staging → prod)
 - Should any non-dev environment create a Git tag/GitHub release? (`create-release`)
 
+**SCOM Docker/AWS Application Details (if Docker/AWS deployment detected):**
+
+- What AWS account IDs are used per environment? (dev, qa, preprod, prod)
+- What IAM role ARN should GitHub Actions assume via OIDC for each account?
+- What ECR registry URL should images be pushed to?
+- What ECS cluster and service names are used per environment? (if deploying to ECS)
+- What Lambda function names need to be updated? (if deploying Lambda functions)
+- What Maven profile is used for Lambda packaging? (e.g., `-Paws-lambda`)
+- What is the ECS task definition file location? (default: `task-definition.json`)
+- What is the container name in the ECS task definition?
+- Is there a health check URL for the deployed service?
+- What is the OIDC provider name and audience for JFrog Artifactory?
+- What is the JFrog Maven repository prefix?
+- What environments are in the promotion chain? (e.g., dev → qa → preprod → prod)
+
 **Existing Reusable Components:**
 
 - Do you have any existing GitHub Actions composite actions or reusable workflows that this pipeline should use?
 - If so, please provide the paths or repository references so they can be incorporated
-- **Note:** For SCOM applications, the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml` is the standard target — no new reusable workflow needs to be created
+- **Note:** For SCOM applications deploying WAR files to Tomcat, use `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml`. For SCOM applications deploying Docker containers to AWS (ECS/Lambda), use `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml`. No new reusable workflow needs to be created for either case.
 
 **Reusable Workflow Placement (if non-SCOM shared libraries are involved):**
 
@@ -190,6 +207,7 @@ Use this reference table when mapping Jenkins concepts to GitHub Actions equival
 - If the source is a **Jenkinsfile** (application pipeline) that does **not** call shared libraries, the output is a **GitHub Actions workflow** placed in the application repository's `.github/workflows/<name>.yml`
 - If the source is a **Jenkinsfile** that **calls non-SCOM shared libraries** (`@Library`), the shared library logic must be extracted into a **reusable workflow** invoked via `workflow_call`. The application workflow calls this reusable workflow. **Prompt the user for where the reusable workflow should live** (application repo, dedicated shared-workflows repo, or organization-level repo). Record the decision in the spec under "Output Strategy"
 - If the source is a **standalone shared library** (`vars/*.groovy`, `src/**/*.groovy`) being migrated independently, the output is a **reusable workflow** and the user must be prompted for the target repository
+- **SCOM Docker/AWS application** (application with Dockerfile deploying to AWS ECS/Lambda) → **Thin caller workflow** invoking the existing `scom-docker-pipeline.yml` reusable workflow. No new reusable workflow is needed — the target already exists at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main`.
 
 ### SCOM Caller Workflow Architecture
 
@@ -333,6 +351,131 @@ jobs:
 - `secrets: inherit` can be used for chained jobs in the same workflow
 - Multi-server deployments pass multiple entries in the `servers` JSON array
 
+### SCOM Docker Pipeline Architecture
+
+For SCOM applications that deploy as Docker containers to AWS, the spec should define a **caller workflow** that passes application-specific parameters to the Docker pipeline reusable workflow. This workflow handles Maven build, Docker image build/push to ECR, and deployment to ECS and/or Lambda.
+
+**Reusable workflow reference:**
+```
+SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+```
+
+**Key reusable workflow inputs:**
+
+| Input | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `environment` | string | yes | — | Target environment (dev, qa, staging, prod). Build steps only run for dev. |
+| `container` | string | yes | — | Logical container/app name (ECR repo name, concurrency key) |
+| `java-version` | string | no | `'8'` | JDK version |
+| `aws-role-arn` | string | yes | — | IAM role ARN for OIDC authentication to AWS |
+| `aws-region` | string | no | `'us-east-1'` | AWS region |
+| `ecr-registry` | string | yes | — | ECR registry URL |
+| `deploy-ecs` | boolean | no | `true` | Enable ECS/Fargate deployment |
+| `ecs-cluster` | string | no | — | ECS cluster name |
+| `ecs-service` | string | no | — | ECS service name |
+| `ecs-task-definition` | string | no | `'task-definition.json'` | Path to ECS task definition JSON |
+| `ecs-container-name` | string | no | — | Container name in task definition |
+| `deploy-lambda` | boolean | no | `false` | Enable Lambda function deployment |
+| `lambda-function-names` | string (JSON) | no | `'[]'` | JSON array of Lambda function names to update |
+| `lambda-maven-profile` | string | no | `'aws-lambda'` | Maven profile for Lambda packaging |
+| `oidc-provider-name` | string | yes | — | OIDC provider name for JFrog |
+| `oidc-audience` | string | yes | — | OIDC audience for JFrog |
+| `repository-prefix` | string | yes | — | JFrog Maven repo prefix |
+| `health-check-url` | string | no | — | Health check URL for deployed service |
+| `version` | string | no | `''` | App version (required for non-dev environments) |
+
+**Required secrets:** `TEAMS_WEBHOOK_URL` (optional)
+
+**Required permissions:** `contents: write`, `id-token: write`
+
+**Reusable workflow outputs:** `version` (resolved app version), `image-uri` (ECR image URI)
+
+**Reference caller workflow (Docker/AWS single-environment):**
+```yaml
+name: Dev Pipeline
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+    with:
+      environment: dev
+      container: assetmanager
+      java-version: '8'
+      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
+      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
+      deploy-ecs: true
+      ecs-cluster: scom-dev
+      ecs-service: assetmanager
+      ecs-container-name: assetmanager
+      deploy-lambda: true
+      lambda-function-names: '["SQSMessageHandlerStore", "SQSMessageHandlerRetrieve"]'
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      health-check-url: http://assetmanager-dev:8088/actuator/health
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+```
+
+**Multi-environment with promotion chain (Docker/AWS):**
+```yaml
+name: CI/CD Pipeline
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+jobs:
+  build-deploy-dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+    with:
+      environment: dev
+      container: assetmanager
+      java-version: '8'
+      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
+      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
+      deploy-ecs: true
+      ecs-cluster: scom-dev
+      ecs-service: assetmanager
+      ecs-container-name: assetmanager
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+  deploy-qa:
+    needs: build-deploy-dev
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+    with:
+      environment: qa
+      container: assetmanager
+      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
+      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
+      deploy-ecs: true
+      ecs-cluster: scom-qa
+      ecs-service: assetmanager
+      ecs-container-name: assetmanager
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      version: ${{ needs.build-deploy-dev.outputs.version }}
+    secrets: inherit
+```
+
+**Key patterns for Docker/AWS caller workflows:**
+- Dev job builds from source, builds Docker image, pushes to ECR — the reusable workflow runs Maven build and Docker build only for dev
+- Non-dev jobs skip the build and use `version` from the dev job's output to resolve the image URI
+- Non-dev jobs chain via `needs:` to enforce promotion order
+- Each environment may use a different AWS account and IAM role ARN
+- Lambda function names are passed as a JSON array for batch updates
+- `secrets: inherit` can be used for chained jobs in the same workflow
+
 **Jenkins-to-reusable-workflow parameter mapping:**
 
 | Jenkins `scomAppPipeline()` Param | Reusable Workflow Input | Transformation |
@@ -467,6 +610,11 @@ Map every Jenkins concept used in this pipeline to its GHA equivalent:
 - [ ] Test result publishing
 - [ ] Notification delivery
 - [ ] Java/Spring build tooling (JDK setup, Maven/Gradle caching, build flags, container image strategy)
+- [ ] Docker image build and registry push (Dockerfile, ECR, build args)
+- [ ] AWS OIDC federation (IAM role assumption from GitHub Actions)
+- [ ] ECS/Fargate deployment (task definition, service update, stability wait)
+- [ ] Lambda function deployment (container image or ZIP update)
+- [ ] Multi-account AWS deployment (different roles/accounts per environment)
 
 ## Secrets Inventory (Post-Migration)
 

@@ -31,7 +31,7 @@ You are a **Senior DevOps Engineer and CI/CD Implementation Specialist** with de
 
 ## Goal
 
-Execute the migration task list to convert Jenkins pipelines into GitHub Actions workflows. Maintain clear progress tracking, create verifiable proof artifacts demonstrating migration parity, and follow proper git workflow protocols. All changes target `.github/workflows/` and related infrastructure files — not application code. Application workflows are created in the application repository's `.github/workflows/` directory. If the migration involves shared libraries, reusable workflows are created in the repository specified in the migration spec's Output Strategy — confirm the target location before writing any reusable workflow files.
+Execute the migration task list to convert Jenkins pipelines into GitHub Actions workflows. Maintain clear progress tracking, create verifiable proof artifacts demonstrating migration parity, and follow proper git workflow protocols. All changes target `.github/workflows/` and related infrastructure files — not application code. For Docker/AWS applications, changes may also include `task-definition.json` for ECS deployments. Application workflows are created in the application repository's `.github/workflows/` directory. If the migration involves shared libraries, reusable workflows are created in the repository specified in the migration spec's Output Strategy — confirm the target location before writing any reusable workflow files.
 
 ### SCOM Application Migrations
 
@@ -129,6 +129,145 @@ jobs:
       servers: |
         [...]
     secrets: inherit
+```
+
+### SCOM Docker/AWS Application Migrations
+
+For SCOM applications that deploy as Docker containers to AWS (ECS/Fargate and/or Lambda), the implementation is a **thin caller workflow** that invokes the existing Docker pipeline reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main`. The reusable workflow handles Maven build, Docker image build/push to ECR, and AWS deployment.
+
+**What to produce:**
+1. A single workflow file in the application repo's `.github/workflows/` directory containing:
+   - Trigger configuration (`workflow_dispatch` by default, optionally `push`/`pull_request`)
+   - Permissions block (`contents: write`, `id-token: write`)
+   - One job per environment, each calling the Docker pipeline reusable workflow with `uses:`
+   - Application-specific inputs: `container`, `aws-role-arn`, `ecr-registry`, `ecs-cluster`, `ecs-service`, `lambda-function-names`, OIDC config, etc.
+   - Environment promotion chain via `needs:` and `version` output passing for non-dev jobs
+2. An ECS task definition file (`task-definition.json`) if deploying to ECS, containing:
+   - Container definition with image placeholder, memory, CPU limits
+   - Environment variables, port mappings, log configuration
+   - Task role and execution role ARNs
+
+**Reference example — Docker/AWS single-environment caller:**
+```yaml
+name: Dev Pipeline
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
+on:
+  workflow_dispatch: # Manual-only trigger until migration is validated
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+    with:
+      environment: dev
+      container: assetmanager
+      java-version: '8'
+      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
+      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
+      deploy-ecs: true
+      ecs-cluster: scom-dev
+      ecs-service: assetmanager
+      ecs-container-name: assetmanager
+      deploy-lambda: true
+      lambda-function-names: '["SQSMessageHandlerStore", "SQSMessageHandlerRetrieve", "SQSMessageHandlerNotify", "SQSMessageHandlerDelete"]'
+      lambda-maven-profile: aws-lambda
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      health-check-url: http://assetmanager-dev:8088/actuator/health
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+```
+
+**Reference example — Docker/AWS multi-environment with promotion:**
+```yaml
+name: CI/CD Pipeline
+on:
+  workflow_dispatch:
+jobs:
+  build-deploy-dev:
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+    with:
+      environment: dev
+      container: assetmanager
+      java-version: '8'
+      aws-role-arn: arn:aws:iam::434206545184:role/github-actions-deploy
+      ecr-registry: 434206545184.dkr.ecr.us-east-1.amazonaws.com
+      deploy-ecs: true
+      ecs-cluster: scom-dev
+      ecs-service: assetmanager
+      ecs-container-name: assetmanager
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+    secrets:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+  deploy-prod:
+    needs: build-deploy-dev
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main
+    with:
+      environment: prod
+      container: assetmanager
+      aws-role-arn: arn:aws:iam::926569254619:role/github-actions-deploy
+      ecr-registry: 926569254619.dkr.ecr.us-east-1.amazonaws.com
+      deploy-ecs: true
+      ecs-cluster: scom-prod
+      ecs-service: assetmanager
+      ecs-container-name: assetmanager
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      version: ${{ needs.build-deploy-dev.outputs.version }}
+    secrets: inherit
+```
+
+**Reference ECS task definition (`task-definition.json`):**
+```json
+{
+  "family": "assetmanager",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "assetmanager",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/assetmanager:latest",
+      "portMappings": [
+        {
+          "containerPort": 8088,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "dev" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/assetmanager",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8088/actuator/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
 ```
 
 **Jenkins parameter mapping reference:**

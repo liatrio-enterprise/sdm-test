@@ -94,6 +94,17 @@ For SCOM application migrations, the task structure is streamlined because the r
 4. **Post-Migration Issues** — File issues for secrets configuration, trigger activation, and any environment-specific details
 
 This is significantly simpler than a full pipeline migration — the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` already encapsulates the CI/CD logic.
+- **SCOM Docker/AWS applications** (most common for containerized apps): The output is a **thin caller workflow** that invokes the existing `scom-docker-pipeline.yml` reusable workflow. Similar to the SCOM caller pattern but maps Docker/AWS-specific parameters (ECR registry, ECS cluster/service, Lambda function names, AWS IAM role ARN). The reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-docker-pipeline.yml@main` handles Maven build, Docker image build/push to ECR, and AWS deployment (ECS/Lambda).
+
+### SCOM Docker/AWS Caller Workflow Task Pattern
+
+For Docker/AWS application migrations, the task structure is similarly streamlined because the reusable workflow handles build, Docker image creation, ECR push, and AWS deployment. The typical task breakdown is:
+
+1. **Foundation** — Create caller workflow file with triggers, permissions, and the `uses:` reference to the Docker pipeline reusable workflow
+2. **Parameter Mapping** — Map all application config to reusable workflow inputs (`container`, `aws-role-arn`, `ecr-registry`, `ecs-cluster`, `ecs-service`, `lambda-function-names`, OIDC config, etc.)
+3. **Environment Chain** — Define the promotion chain (dev → qa → preprod → prod) with `needs:` dependencies, version passing, and per-environment AWS role ARNs
+4. **ECS Task Definition** — Create the `task-definition.json` file defining the container configuration (image placeholder, memory, CPU, env vars, port mappings, log configuration)
+5. **Post-Migration Issues** — File issues for AWS OIDC configuration (IAM roles, identity provider), ECR repository creation, secrets configuration, and trigger activation
 
 ## Why Two-Phase Task Generation?
 
@@ -263,6 +274,48 @@ TBD
 TBD
 ```
 
+### SCOM Docker/AWS Caller Workflow — Phase 2 Example
+
+For SCOM Docker/AWS application migrations, use this task structure:
+
+```markdown
+## Tasks
+
+### [ ] 1.0 Caller Workflow Foundation
+
+#### 1.0 Proof Artifact(s)
+
+- GHA Run: Caller workflow triggers via `workflow_dispatch` and invokes the Docker pipeline reusable workflow successfully
+- actionlint: Clean output with no errors demonstrates valid workflow YAML
+
+#### 1.0 Tasks
+
+TBD
+
+### [ ] 2.0 Parameter Mapping, ECS Task Definition, and Environment Chain
+
+#### 2.0 Proof Artifact(s)
+
+- GHA Run: Dev job builds Maven project, builds Docker image, pushes to ECR successfully
+- GHA Run: Non-dev jobs (if applicable) receive version from dev and deploy correctly
+- Diff: All application parameters mapped to reusable workflow inputs
+- Diff: `task-definition.json` with correct container config
+
+#### 2.0 Tasks
+
+TBD
+
+### [ ] 3.0 File Post-Migration GitHub Issues
+
+#### 3.0 Proof Artifact(s)
+
+- GitHub Issues: All deferred items filed as issues to the repo
+
+#### 3.0 Tasks
+
+TBD
+```
+
 ## Phase 3 Output Format (Complete with Sub-Tasks)
 
 ```markdown
@@ -341,6 +394,10 @@ Before finalizing, verify:
 - [ ] CI/CD best practices from the spec are reflected in task requirements
 - [ ] Sub-tasks are actionable and unambiguous
 - [ ] Post-migration issues cover all deferred items (secrets, composite actions, integrations, triggers)
+- [ ] (Docker/AWS) ECS task definition JSON is syntactically valid
+- [ ] (Docker/AWS) AWS IAM role ARNs are specified per environment
+- [ ] (Docker/AWS) ECR registry URL matches the target AWS account
+- [ ] (Docker/AWS) Lambda function names are correct and complete
 
 ## What Comes Next
 
