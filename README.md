@@ -47,7 +47,7 @@ Install these prompts as native `/slash-commands` in your AI assistant (Cursor, 
 ```bash
 uvx --from git+https://github.com/liatrio-labs/slash-command-manager \
   slash-man generate \
-  --github-repo liatrio-labs/spec-driven-workflow \
+  --github-repo liatrio-enterprise/sdm-test \
   --github-branch main \
   --github-path prompts/
 ```
@@ -57,7 +57,7 @@ uvx --from git+https://github.com/liatrio-labs/slash-command-manager \
 ```ps
 uvx --from git+https://github.com/liatrio-labs/slash-command-manager `
   slash-man generate `
-  --github-repo liatrio-labs/spec-driven-workflow `
+  --github-repo liatrio-enterprise/sdm-test `
   --github-branch main `
   --github-path prompts/
 ```
