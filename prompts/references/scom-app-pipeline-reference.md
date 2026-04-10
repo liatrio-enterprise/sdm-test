@@ -52,19 +52,15 @@ When discovering SCOM Java apps, extract:
 ### Reference Caller Workflows
 
 Applications use a **two-file pattern**:
-1. **`dev-qa-pipeline.yml`** — Handles dev (builds from source) and qa (promotes the dev build). Dev and QA deploy to the same server pair.
-2. **`prod-pipeline.yml`** — Triggers on dev/qa workflow success via `workflow_run`, gated by environment protection rules for manual approval. Resolves version from the completed dev/qa run.
+1. **`dev-qa-pipeline.yml`** — Triggered by pull requests against `main`. Builds from source and deploys to the dev/QA servers (shared server pair). Uses a single job since dev and QA share the same deployment targets.
+2. **`prod-pipeline.yml`** — Triggered on push to `main` (i.e., PR merge). Builds from source, then deploys to prod gated by environment protection rules for manual approval.
 
-**`dev-qa-pipeline.yml` (build + promote):**
+**`dev-qa-pipeline.yml` (PR-triggered build + deploy):**
 ```yaml
 name: Dev/QA Pipeline
-# on:
-#   push:
-#     branches: [main]
-#   pull_request:
-#     branches: [main]
 on:
-  workflow_dispatch: # Manual-only trigger until migration is validated
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
   id-token: write
@@ -86,79 +82,36 @@ jobs:
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+```
 
-  qa:
-    needs: dev
+**`prod-pipeline.yml` (push-to-main build + deploy, gated by manual approval):**
+```yaml
+name: Prod Pipeline
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  id-token: write
+jobs:
+  build:
     uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
     with:
-      environment: qa
+      environment: dev
       java-version: '21'
       java-distribution: corretto
       container: b2capi
       oidc-provider-name: soa-scom-github
       oidc-audience: soa-scom-github
       repository-prefix: scom-mvn
-      version: ${{ needs.dev.outputs.version }}
       health-check-url: http://b2capi.qa.subaru.com/b2capi/actuator/health
       deploy-path: /app/home/embedded_tomcat/b2capi
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-```
-
-**`prod-pipeline.yml` (deploy on dev/qa success, gated by manual approval):**
-```yaml
-name: Prod Pipeline
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to deploy (e.g., 1.2.3). Leave empty to use version from latest Dev/QA run.'
-        required: false
-        type: string
-  workflow_run:
-    workflows: ["Dev/QA Pipeline"]
-    types: [completed]
-    branches: [main]
-permissions:
-  contents: write
-  id-token: write
-  actions: read
-jobs:
-  resolve-version:
-    if: >-
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
-    runs-on: LandingZones
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - name: Resolve version
-        id: version
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
-            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            # Get version from the completed Dev/QA workflow run
-            RUN_ID="${{ github.event.workflow_run.id }}"
-            if [ -z "$RUN_ID" ]; then
-              # workflow_dispatch without version — find latest successful Dev/QA run
-              RUN_ID=$(gh run list --workflow="Dev/QA Pipeline" --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
-            fi
-            # Extract version from the dev job outputs
-            VERSION=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name | startswith("dev")) | .outputs.version' 2>/dev/null || true)
-            if [ -z "$VERSION" ]; then
-              echo "::error::Could not resolve version from Dev/QA run $RUN_ID"
-              exit 1
-            fi
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          fi
 
   prod:
-    needs: resolve-version
+    needs: build
     uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
     with:
       environment: prod
@@ -168,7 +121,7 @@ jobs:
       oidc-provider-name: soa-scom-github
       oidc-audience: soa-scom-github
       repository-prefix: scom-mvn
-      version: ${{ needs.resolve-version.outputs.version }}
+      version: ${{ needs.build.outputs.version }}
       health-check-url: http://b2capi.prod.subaru.com/b2capi/actuator/health
       deploy-path: /app/home/embedded_tomcat/b2capi
     secrets:
@@ -177,11 +130,10 @@ jobs:
 ```
 
 **Key caller workflow patterns:**
-- Dev job builds from source (`environment: dev`) — the reusable workflow runs Maven build only for dev
-- QA job chains after dev via `needs:` and passes `version: ${{ needs.dev.outputs.version }}`
-- Dev and QA share the same server pair; the env-config action resolves the correct servers per environment
-- Prod is in a separate workflow file — triggers on dev/qa success via `workflow_run`, with environment protection rules for manual approval
-- Prod also supports manual `workflow_dispatch` with an optional version override
+- Dev/QA pipeline uses a single job since both environments share the same server pair — no separate QA promotion step needed
+- Dev/QA is triggered by `pull_request` against `main`, providing CI validation before merge
+- Prod pipeline triggers on `push` to `main` (i.e., when a PR is merged)
+- Prod first builds from source (`environment: dev` job), then deploys to prod using the built version — gated by environment protection rules for manual approval
 - The reusable workflow defaults to blue-green deployment; callers can override with `deployment-mode: single`
 - `health-check-url` and `deploy-path` are required for all environments
 - Server hostnames, users, and ports are resolved automatically by the env-config action — callers only pass `container` and `environment`
