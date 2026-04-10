@@ -52,15 +52,17 @@ When discovering SCOM Java apps, extract:
 ### Reference Caller Workflows
 
 Applications use a **two-file pattern**:
-1. **`dev-qa-pipeline.yml`** — Triggered by pull requests against `main`. Builds from source and deploys to the dev/QA servers (shared server pair). Uses a single job since dev and QA share the same deployment targets.
-2. **`prod-pipeline.yml`** — Triggered on push to `main` (i.e., PR merge). Builds from source, then deploys to prod gated by environment protection rules for manual approval.
+1. **`dev-qa-pipeline.yml`** — Triggered by pull requests against the repository's **default branch**. Builds from source and deploys to the dev/QA servers (shared server pair). Uses a single job since dev and QA share the same deployment targets.
+2. **`prod-pipeline.yml`** — Triggered on push to `main` (i.e., PR merge or release merge). Builds from source, then deploys to prod gated by environment protection rules for manual approval.
+
+> **Branch note:** Not all repositories use `main` as their default branch (e.g., some use `develop`). The dev/QA pipeline must target the repository's actual default branch in its `pull_request` trigger. The prod pipeline always targets `main` — for repos where the default branch is not `main`, a release merge from the default branch into `main` triggers the prod deploy.
 
 **`dev-qa-pipeline.yml` (PR-triggered build + deploy):**
 ```yaml
 name: Dev/QA Pipeline
 on:
   pull_request:
-    branches: [main]
+    branches: [<default-branch>]  # Replace with repo's default branch (e.g., main, develop)
 permissions:
   contents: write
   id-token: write
@@ -131,8 +133,8 @@ jobs:
 
 **Key caller workflow patterns:**
 - Dev/QA pipeline uses a single job since both environments share the same server pair — no separate QA promotion step needed
-- Dev/QA is triggered by `pull_request` against `main`, providing CI validation before merge
-- Prod pipeline triggers on `push` to `main` (i.e., when a PR is merged)
+- Dev/QA is triggered by `pull_request` against the repository's **default branch** (may be `main`, `develop`, etc.), providing CI validation before merge
+- Prod pipeline always triggers on `push` to `main` — for repos where the default branch is not `main`, a release merge into `main` triggers the prod deploy
 - Prod first builds from source (`environment: dev` job), then deploys to prod using the built version — gated by environment protection rules for manual approval
 - The reusable workflow defaults to blue-green deployment; callers can override with `deployment-mode: single`
 - `health-check-url` and `deploy-path` are required for all environments
