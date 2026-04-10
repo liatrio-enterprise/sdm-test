@@ -72,26 +72,50 @@ If the user did not provide a Jenkinsfile or reference to their Jenkins pipeline
 
 ## Discovery Process Overview
 
-1. **Locate Jenkinsfiles** — Scan the repository for all pipeline definitions
-2. **Pipeline Classification** — Categorize each pipeline by type, complexity, and triggers
-3. **Plugin Inventory** — Detect all plugin usage from pipeline syntax
-4. **Credentials Audit** — Catalog all credential references by type (never extract values)
-5. **Agent/Node Assessment** — Map agent configurations to runner strategies
-6. **Shared Library Analysis** — Document library usage, roles, and complexity
-7. **Integration Points** — Identify all external system connections
-8. **Scope Assessment** — Evaluate if the migration is appropriately sized
+1. **Repository Details** — Detect the repository's default branch and basic Git metadata
+2. **Locate Jenkinsfiles** — Scan the repository for all pipeline definitions
+3. **Pipeline Classification** — Categorize each pipeline by type, complexity, and triggers
+4. **Plugin Inventory** — Detect all plugin usage from pipeline syntax
+5. **Credentials Audit** — Catalog all credential references by type (never extract values)
+6. **Agent/Node Assessment** — Map agent configurations to runner strategies
+7. **Shared Library Analysis** — Document library usage, roles, and complexity
+8. **Integration Points** — Identify all external system connections
+9. **Scope Assessment** — Evaluate if the migration is appropriately sized
 
 ### Greenfield Discovery Process (when no Jenkinsfile exists)
 
 If no Jenkinsfile is found and the application has build artifacts (pom.xml, Dockerfile, etc.), switch to greenfield discovery:
 
-1. **Build System Analysis** — Examine pom.xml/build.gradle for dependencies, plugins, profiles, packaging type
-2. **Dockerfile Analysis** — Examine Dockerfile for base image, exposed ports, build stages, profiles
-3. **Deployment Target Assessment** — Identify deployment targets from application config (AWS resources, environment variables, secrets)
-4. **Credentials & Environment Audit** — Catalog all environment variables, AWS Secrets Manager references, config files per profile
-5. **Integration Points** — Identify external services (databases, message queues, APIs, cloud services)
-6. **Infrastructure Mapping** — Map AWS accounts, regions, and resources per environment
-7. **Scope Assessment** — Evaluate if this is appropriate for the Docker pipeline workflow
+1. **Repository Details** — Detect the repository's default branch and basic Git metadata (same as above)
+2. **Build System Analysis** — Examine pom.xml/build.gradle for dependencies, plugins, profiles, packaging type
+3. **Dockerfile Analysis** — Examine Dockerfile for base image, exposed ports, build stages, profiles
+4. **Deployment Target Assessment** — Identify deployment targets from application config (AWS resources, environment variables, secrets)
+5. **Credentials & Environment Audit** — Catalog all environment variables, AWS Secrets Manager references, config files per profile
+6. **Integration Points** — Identify external services (databases, message queues, APIs, cloud services)
+7. **Infrastructure Mapping** — Map AWS accounts, regions, and resources per environment
+8. **Scope Assessment** — Evaluate if this is appropriate for the Docker pipeline workflow
+
+## Step 0: Repository Details
+
+Before analyzing pipelines or build systems, detect the repository's default branch. This is needed for workflow trigger configuration — dev/QA workflows trigger on pull requests to the default branch, while prod workflows trigger on push to `main`.
+
+**Detection method:**
+```bash
+git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'
+```
+
+If the above fails (e.g., `origin/HEAD` is not set), fall back to:
+1. Check `git branch -r` for `origin/HEAD -> origin/<branch>`
+2. Look at the current checked-out branch
+3. Ask the user
+
+**Record in discovery report:**
+
+| Attribute | Value |
+|---|---|
+| **Default Branch** | `<detected branch name>` |
+
+> **Why this matters:** Not all repositories use `main` as their default branch. Some use `develop` or other branch names. The dev/QA caller workflow must target the actual default branch in its `pull_request` trigger. The prod workflow always targets `main`. For repos where the default branch is not `main`, a release merge into `main` triggers the prod deploy.
 
 ## Step 1: Locate Jenkinsfiles
 
@@ -415,6 +439,9 @@ Evaluate whether this migration request is appropriately sized.
 
 ```markdown
 # [NN] Discovery Report — [Pipeline Name]
+
+## Repository Details
+[Default branch name and Git metadata]
 
 ## Pipeline Inventory
 [Table of all Jenkinsfiles found with classification]

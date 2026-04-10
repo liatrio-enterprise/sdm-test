@@ -135,7 +135,7 @@ For the full Jenkins-to-GitHub Actions concept mapping table, read `prompts/refe
 
 For SCOM Java application migrations, the spec should define a **caller workflow** that passes application-specific parameters to the reusable workflow. The reusable workflow handles all build, deploy, and notification logic — the caller workflow only provides configuration.
 
-For the full parameter table and reference caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline"). The goal-state caller pattern uses two workflow files per application: `dev-qa-pipeline.yml` (build and promote) and `prod-pipeline.yml` (deploy only, triggered on dev/qa success). See the reference file for complete examples.
+For the full parameter table and reference caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline"). The goal-state caller pattern uses two workflow files per application: `dev-qa-pipeline.yml` (PR-triggered against the repo's default branch) and `prod-pipeline.yml` (push-to-main triggered). The dev/QA pipeline branch must match the repository's **default branch** as detected during SDM-1 discovery (see "Repository Details" in the discovery report). See the reference file for complete examples.
 
 ### SCOM Docker Pipeline Architecture
 

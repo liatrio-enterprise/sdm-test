@@ -62,7 +62,7 @@ Applications use a **two-file pattern**:
 name: Dev/QA Pipeline
 on:
   pull_request:
-    branches: [<default-branch>]  # Replace with repo's default branch (e.g., main, develop)
+    branches: [develop]  # Use the repo's default branch (from discovery report)
 permissions:
   contents: write
   id-token: write
