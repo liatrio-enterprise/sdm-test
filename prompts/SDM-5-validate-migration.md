@@ -42,7 +42,7 @@ Validate that the GitHub Actions migration is complete, functionally equivalent 
 - **Discovery Report** (baseline Jenkins estate inventory)
 - **Task List** (contains proof artifacts and relevant files)
 - **Repository root** is the current working directory
-- **Implementation work** is on the current git branch
+- **Implementation work** should be on a `feature/<pipeline-name>-migration` branch (e.g., `feature/b2capi-migration`)
 
 ## Auto-Discovery Protocol
 

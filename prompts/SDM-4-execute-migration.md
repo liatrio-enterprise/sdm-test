@@ -243,9 +243,11 @@ Each parent task must include artifacts that:
 
 ### Branch Management
 
-- Work on a dedicated migration branch
+- **Before starting any work**, create and check out a feature branch: `feature/<pipeline-name>-migration` (e.g., `feature/b2capi-migration`, `feature/assetmanager-migration`). Derive the branch name from the migration spec's pipeline name.
+- If a feature branch already exists for this migration, check it out instead of creating a new one.
 - Keep commits clean and atomic — one parent task per commit
 - Include proof artifacts in commits
+- **Push after every parent task commit**: `git push -u origin feature/<branch-name>` to keep the remote up to date
 
 ## Error Recovery
 
