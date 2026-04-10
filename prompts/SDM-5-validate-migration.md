@@ -66,10 +66,10 @@ All gates must pass for the migration to be approved:
 
 For SCOM application migrations that produce a caller workflow invoking `scom-app-pipeline.yml`, also verify:
 
-- **GATE E — Parameter Completeness**: Every Jenkins `scomAppPipeline()` parameter has been mapped to a reusable workflow input. No required inputs are missing.
-- **GATE F — Server Configuration**: The `servers` JSON is valid and includes all required fields (`host`, `user`, `path`, `war-name`, `health-check-url`) for every target server.
-- **GATE G — Environment Chain**: If multi-environment, non-dev jobs use `needs:` to chain after the dev job and pass `version: ${{ needs.<dev-job>.outputs.version }}`.
-- **GATE H — Reusable Workflow Reference**: The `uses:` directive points to `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` (or the appropriate branch/tag).
+- **GATE E — Parameter Completeness**: Every Jenkins `scomAppPipeline()` parameter has been mapped to a reusable workflow input. No required inputs are missing. `health-check-url` and `deploy-path` are present for every environment job.
+- **GATE F — Two-File Pattern**: The migration produces two workflow files (`dev-qa-pipeline.yml` and `prod-pipeline.yml`). Both files exist and are valid YAML.
+- **GATE G — Environment Chain**: In `dev-qa-pipeline.yml`, the QA job uses `needs: dev` and passes `version: ${{ needs.dev.outputs.version }}`. In `prod-pipeline.yml`, the prod job resolves version from the completed dev/qa workflow run (via `workflow_run` trigger) or from a manual `workflow_dispatch` input.
+- **GATE H — Reusable Workflow Reference**: The `uses:` directive points to `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` (or the appropriate branch/tag) in both workflow files.
 
 ### SCOM Docker/AWS Caller Workflow Validation (additional checks)
 
@@ -142,10 +142,11 @@ Cross-reference:
 **For SCOM caller workflow migrations, also verify:**
 
 5. **Parameter mapping** → every Jenkins `scomAppPipeline()` parameter has a corresponding reusable workflow input in the caller workflow
-6. **Server JSON validity** → `servers` input is valid JSON with all required fields per server entry
-7. **Environment promotion** → non-dev jobs chain via `needs:` and pass `version` from the dev job output
+6. **Deployment configuration** → `health-check-url` and `deploy-path` are present and non-empty for every environment job
+7. **Environment promotion** → in `dev-qa-pipeline.yml`, QA chains via `needs: dev` and passes `version`; in `prod-pipeline.yml`, prod receives version from the completed dev/qa workflow run or `workflow_dispatch` input
 8. **Secret references** → `SSH_PRIVATE_KEY` and `TEAMS_WEBHOOK_URL` are passed correctly (directly or via `secrets: inherit`)
-9. **Permissions** → caller workflow includes `contents: write` and `id-token: write` at minimum
+9. **Permissions** → caller workflows include `contents: write` and `id-token: write` at minimum
+10. **Two-file pattern** → migration produces both `dev-qa-pipeline.yml` and `prod-pipeline.yml`
 
 ### Step 5 — Post-Migration Issue Review
 

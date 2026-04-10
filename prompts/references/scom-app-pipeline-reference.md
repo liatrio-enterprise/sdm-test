@@ -17,57 +17,54 @@ SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@ma
 |---|---|---|---|---|
 | `environment` | string | yes | — | Target environment (dev, qa, staging, prod). Build steps only run for dev. |
 | `java-version` | string | no | `'21'` | JDK version |
-| `java-distribution` | string | no | `'corretto'` | JDK distribution |
-| `container` | string | yes | — | Logical container name (used in concurrency groups) |
-| `deploy` | boolean | no | `true` | Enable deployment stages |
-| `servers` | string | yes | — | JSON array of server targets (see format below) |
-| `maven-deploy` | boolean | no | `false` | Enable Maven artifact publishing to JFrog |
-| `oidc-provider-name` | string | yes | — | OIDC provider name in JFrog Artifactory |
-| `oidc-audience` | string | yes | — | OIDC audience value in JFrog Artifactory |
-| `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`) |
-| `create-release` | boolean | no | `false` | Create Git tag and GitHub release after deploy |
+| `java-distribution` | string | no | `'corretto'` | JDK distribution (e.g., corretto, temurin, zulu) |
+| `container` | string | yes | — | Logical container name (used by env-config to resolve server configuration) |
+| `deployment-mode` | string | no | `'blue-green'` | Deployment strategy: `blue-green` (zero-downtime with site-status switching) or `single` (sequential to all servers) |
+| `oidc-provider-name` | string | yes | — | OIDC provider name configured in JFrog Artifactory |
+| `oidc-audience` | string | yes | — | OIDC audience value configured in JFrog Artifactory |
+| `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`). Configures both `{prefix}-release` and `{prefix}-snapshot` repos. |
 | `version` | string | no | `''` | App version (required for non-dev environments) |
-| `health-check-timeout` | string | no | `'60'` | Seconds to wait for health check |
+| `health-check-url` | string | yes | — | Health check URL curled via SSH on the target server after deploy (e.g., `http://b2capi.qa.subaru.com/b2capi/actuator/health`) |
+| `deploy-path` | string | yes | — | Absolute deploy path on the server (e.g., `/app/home/embedded_tomcat/b2capi`) |
 
 **Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
 
 **Required permissions:** `contents: write`, `id-token: write` (plus `checks: write` and `pull-requests: write` if PR-triggered)
 
-**Outputs:** `version` — resolved application version (from Maven build in dev, from input in non-dev)
+**Outputs:**
+- `version` — resolved application version (from Maven build in dev, from input in non-dev)
+- `active-host` — hostname of the active server (from env-config via deploy)
+- `standby-host` — hostname of the standby server (from env-config via deploy)
 
-### Server JSON Format
-
-```json
-[
-  {
-    "host": "hostname",
-    "user": "deploy-user",
-    "port": "22",
-    "path": "/deploy/path",
-    "war-name": "app.war",
-    "health-check-url": "http://hostname:port/endpoint"
-  }
-]
-```
+> **Server resolution:** The reusable workflow resolves server hostnames, users, and ports dynamically via the `env-config` action using the `container` and `environment` inputs. Callers do not pass server details — they only provide `container`, `health-check-url`, and `deploy-path`.
 
 ### Discovery Extraction Guide (SDM-1)
 
 When discovering SCOM Java apps, extract:
-1. The `container` name and any `context` path from the shared library call
+1. The `container` name from the shared library call (e.g., `container: 'b2capi'`)
 2. The JDK version (translate Jenkins format: `java-8` → `'8'`, `java-21` → `'21'`)
-3. Server hostnames, users, deploy paths, WAR file names, and health check URLs from deployment configuration
-4. Whether Maven artifact publishing is enabled
-5. The environment promotion chain (dev → qa → staging → prod)
+3. The `deploy-path` — absolute path on the server where the application is deployed
+4. The `health-check-url` — URL used to verify the application is running after deploy
+5. The `deployment-mode` preference — `blue-green` (default) or `single`
+6. The environment promotion chain (dev → qa → staging → prod)
+7. OIDC and JFrog repository configuration (`oidc-provider-name`, `oidc-audience`, `repository-prefix`)
 
 ### Reference Caller Workflows
 
-**Single-environment (dev only):**
+Applications use a **two-file pattern**:
+1. **`dev-qa-pipeline.yml`** — Handles dev (builds from source) and qa (promotes the dev build). Dev and QA deploy to the same server pair.
+2. **`prod-pipeline.yml`** — Triggers on dev/qa workflow success via `workflow_run`, gated by environment protection rules for manual approval. Resolves version from the completed dev/qa run.
+
+**`dev-qa-pipeline.yml` (build + promote):**
 ```yaml
-name: Dev Pipeline
+name: Dev/QA Pipeline
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
 on:
-  workflow_dispatch:
-  pull_request:
-    branches: [main]
+  workflow_dispatch: # Manual-only trigger until migration is validated
 permissions:
   contents: write
   id-token: write
@@ -81,78 +78,113 @@ jobs:
       java-version: '21'
       java-distribution: corretto
       container: b2capi
-      deploy: true
-      maven-deploy: true
       oidc-provider-name: soa-scom-github
       oidc-audience: soa-scom-github
       repository-prefix: scom-mvn
-      health-check-timeout: '60'
-      servers: |
-        [
-          {
-            "host": "server1.example.com",
-            "user": "deployer",
-            "path": "/tmp",
-            "war-name": "app.war",
-            "health-check-url": "http://server1:8080/actuator/health"
-          }
-        ]
+      health-check-url: http://b2capi.qa.subaru.com/b2capi/actuator/health
+      deploy-path: /app/home/embedded_tomcat/b2capi
     secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-```
-
-**Multi-environment with promotion chain (dev → qa):**
-```yaml
-name: CI/CD Pipeline
-on:
-  workflow_dispatch:
-  pull_request:
-    branches: [develop]
-jobs:
-  build-deploy-dev:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: dev
-      java-version: '8'
-      container: serv
-      deploy: true
-      maven-deploy: true
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      servers: |
-        [
-          { "host": "server1", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server1:8080/serv/version" },
-          { "host": "server2", "user": "deployer", "port": "22", "path": "/app/path", "war-name": "serv.war", "health-check-url": "http://server2:8080/serv/version" }
-        ]
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
 
-  deploy-qa:
-    needs: build-deploy-dev
+  qa:
+    needs: dev
     uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
     with:
       environment: qa
-      container: serv
-      deploy: true
+      java-version: '21'
+      java-distribution: corretto
+      container: b2capi
       oidc-provider-name: soa-scom-github
       oidc-audience: soa-scom-github
       repository-prefix: scom-mvn
-      create-release: true
-      version: ${{ needs.build-deploy-dev.outputs.version }}
-      servers: |
-        [...]
-    secrets: inherit
+      version: ${{ needs.dev.outputs.version }}
+      health-check-url: http://b2capi.qa.subaru.com/b2capi/actuator/health
+      deploy-path: /app/home/embedded_tomcat/b2capi
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+```
+
+**`prod-pipeline.yml` (deploy on dev/qa success, gated by manual approval):**
+```yaml
+name: Prod Pipeline
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 1.2.3). Leave empty to use version from latest Dev/QA run.'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Dev/QA Pipeline"]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: write
+  id-token: write
+  actions: read
+jobs:
+  resolve-version:
+    if: >-
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: LandingZones
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Resolve version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            # Get version from the completed Dev/QA workflow run
+            RUN_ID="${{ github.event.workflow_run.id }}"
+            if [ -z "$RUN_ID" ]; then
+              # workflow_dispatch without version — find latest successful Dev/QA run
+              RUN_ID=$(gh run list --workflow="Dev/QA Pipeline" --status=success --limit=1 --json databaseId --jq '.[0].databaseId')
+            fi
+            # Extract version from the dev job outputs
+            VERSION=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name | startswith("dev")) | .outputs.version' 2>/dev/null || true)
+            if [ -z "$VERSION" ]; then
+              echo "::error::Could not resolve version from Dev/QA run $RUN_ID"
+              exit 1
+            fi
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+  prod:
+    needs: resolve-version
+    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
+    with:
+      environment: prod
+      java-version: '21'
+      java-distribution: corretto
+      container: b2capi
+      oidc-provider-name: soa-scom-github
+      oidc-audience: soa-scom-github
+      repository-prefix: scom-mvn
+      version: ${{ needs.resolve-version.outputs.version }}
+      health-check-url: http://b2capi.prod.subaru.com/b2capi/actuator/health
+      deploy-path: /app/home/embedded_tomcat/b2capi
+    secrets:
+      SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_PROD_SSH }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
 ```
 
 **Key caller workflow patterns:**
 - Dev job builds from source (`environment: dev`) — the reusable workflow runs Maven build only for dev
-- Non-dev jobs skip the build and use `version` from the dev job's output
-- Non-dev jobs chain via `needs:` to enforce promotion order
-- `secrets: inherit` can be used for chained jobs in the same workflow
-- Multi-server deployments pass multiple entries in the `servers` JSON array
+- QA job chains after dev via `needs:` and passes `version: ${{ needs.dev.outputs.version }}`
+- Dev and QA share the same server pair; the env-config action resolves the correct servers per environment
+- Prod is in a separate workflow file — triggers on dev/qa success via `workflow_run`, with environment protection rules for manual approval
+- Prod also supports manual `workflow_dispatch` with an optional version override
+- The reusable workflow defaults to blue-green deployment; callers can override with `deployment-mode: single`
+- `health-check-url` and `deploy-path` are required for all environments
+- Server hostnames, users, and ports are resolved automatically by the env-config action — callers only pass `container` and `environment`
 
 ---
 
@@ -357,9 +389,11 @@ jobs:
 |---|---|---|
 | `container: 'name'` | `container: name` | Direct mapping |
 | `jdk: 'java-8'` | `java-version: '8'` | Strip `java-` prefix |
-| `deploy: true/false` | `deploy: true/false` | Direct mapping |
-| `context: '/path'` | Part of `health-check-url` in `servers` JSON | Combine with host and port |
-| `enabled: true` | `deploy: true` | Rename |
+| `context: '/path'` | Part of `health-check-url` | Combine with hostname and port to form full health check URL |
+| `enabled: true` | (no equivalent — always deploys) | Removed; deployment always occurs |
+| `deploy: true/false` | (removed) | No longer an input; deployment always occurs |
+| (Jenkins server config) | `deploy-path` | Extract from Jenkins deployment configuration |
+| (Jenkins health check) | `health-check-url` | Extract from Jenkins deployment configuration |
+| (not in Jenkins) | `deployment-mode` | New — defaults to `blue-green`; set to `single` if needed |
 | (not in Jenkins) | `oidc-provider-name`, `oidc-audience` | New — ask user for OIDC config |
 | (not in Jenkins) | `repository-prefix` | New — ask user for JFrog repo prefix |
-| (not in Jenkins) | `servers` JSON | New — ask user for server details (host, user, path, war-name, health-check-url) |

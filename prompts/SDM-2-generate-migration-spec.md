@@ -71,14 +71,14 @@ Ask clarifying questions to gather detail not available from the Jenkinsfile alo
 
 **If SCOM Java pipeline detected** (Jenkinsfile calls `scomAppPipeline()`):
 
-- Deployment server details per environment (hostname, SSH user, deploy path, WAR name, health check URL)
+- Deploy path on the target server (e.g., `/app/home/embedded_tomcat/b2capi`)
+- Health check URL per environment (e.g., `http://b2capi.qa.subaru.com/b2capi/actuator/health`)
 - OIDC provider name and audience for JFrog Artifactory (e.g., `soa-scom-github`)
 - JFrog Maven repository prefix (e.g., `scom-mvn`, `snet-mvn`)
-- Should Maven artifacts be published on dev builds? (`maven-deploy`)
+- Deployment mode preference: blue-green (default, zero-downtime) or single (sequential)?
 - Environment promotion chain (e.g., dev → qa → staging → prod)
-- Should any non-dev environment create a Git tag/GitHub release? (`create-release`)
 
-**Note:** For SCOM Java apps, the reusable workflow already exists — no new one is needed.
+**Note:** For SCOM Java apps, the reusable workflow already exists — no new one is needed. Server hostnames and users are resolved dynamically by the env-config action.
 
 **If Docker/AWS deployment detected** (Dockerfile + AWS infrastructure):
 
@@ -135,7 +135,7 @@ For the full Jenkins-to-GitHub Actions concept mapping table, read `prompts/refe
 
 For SCOM Java application migrations, the spec should define a **caller workflow** that passes application-specific parameters to the reusable workflow. The reusable workflow handles all build, deploy, and notification logic — the caller workflow only provides configuration.
 
-For the full parameter table, server JSON format, and reference caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline").
+For the full parameter table and reference caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline"). The goal-state caller pattern uses two workflow files per application: `dev-qa-pipeline.yml` (build and promote) and `prod-pipeline.yml` (deploy only, triggered on dev/qa success). See the reference file for complete examples.
 
 ### SCOM Docker Pipeline Architecture
 

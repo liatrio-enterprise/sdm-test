@@ -40,7 +40,7 @@ The migration output type depends on the source — classify early so the discov
 
 ### SCOM Reusable Workflow Reference
 
-When the migration target is the SCOM reusable workflow, discovery should focus on extracting parameters that map to the reusable workflow's inputs. For the full parameter table, server JSON format, and caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Discovery Extraction Guide").
+When the migration target is the SCOM reusable workflow, discovery should focus on extracting parameters that map to the reusable workflow's inputs. For the full parameter table and caller workflow examples, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Discovery Extraction Guide").
 
 The reusable workflow lives at:
 ```
@@ -126,14 +126,14 @@ If the Jenkinsfile calls `scomAppPipeline(...)`, this is an **SCOM application p
 
 1. **Do NOT request the shared library source.** The shared library logic has already been migrated into the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml`.
 2. **Extract the parameters** passed to `scomAppPipeline()` — these map directly to the reusable workflow inputs (see SCOM Reusable Workflow Reference above).
-3. **Proceed with discovery** using the parameter mapping approach, supplemented by the repo's `pom.xml` for artifact/version details and any deployment configuration files for server targets.
+3. **Proceed with discovery** using the parameter mapping approach, supplemented by the repo's `pom.xml` for artifact/version details. Note: server hostnames and users are resolved dynamically by the env-config action — discovery should focus on extracting `container`, `deploy-path`, and `health-check-url` instead of individual server details.
 
 Example SCOM Jenkinsfile:
 ```groovy
 scomAppPipeline(enabled: true, container: 'serv', context: '/serv', deploy: true, jdk: 'java-8')
 ```
 
-This maps to a caller workflow with: `container: serv`, `java-version: '8'`, `deploy: true`.
+This maps to a caller workflow with: `container: serv`, `java-version: '8'`. The `deploy` and `context` Jenkins parameters are no longer direct inputs — `context` is incorporated into `health-check-url`, and deployment always occurs.
 
 #### Non-SCOM Wrapper Pattern
 

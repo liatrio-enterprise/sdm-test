@@ -85,9 +85,9 @@ If the spec doesn't specify where reusable workflows live, **ask the user** befo
 
 For SCOM application migrations, the task structure is streamlined because the reusable workflow already handles build, deploy, and notification logic. The typical task breakdown is:
 
-1. **Foundation** — Create caller workflow file with triggers, permissions, and the `uses:` reference to the reusable workflow
-2. **Parameter Mapping** — Map all Jenkins parameters to reusable workflow inputs (`container`, `java-version`, `servers` JSON, OIDC config, etc.)
-3. **Environment Chain** — Define the promotion chain (dev → qa → staging → prod) with `needs:` dependencies and version passing
+1. **Foundation** — Create two caller workflow files (`dev-qa-pipeline.yml` and `prod-pipeline.yml`) with triggers, permissions, and `uses:` references to the reusable workflow
+2. **Parameter Mapping** — Map all Jenkins parameters to reusable workflow inputs (`container`, `java-version`, `health-check-url`, `deploy-path`, OIDC config, etc.)
+3. **Environment Chain** — In `dev-qa-pipeline.yml`, define the dev → qa promotion chain with `needs:` and version passing. In `prod-pipeline.yml`, configure `workflow_run` trigger to fire on dev/qa success with environment protection rules for manual approval.
 4. **Post-Migration Issues** — File issues for secrets configuration, trigger activation, and any environment-specific details
 
 This is significantly simpler than a full pipeline migration — the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` already encapsulates the CI/CD logic.
@@ -241,8 +241,9 @@ For SCOM application migrations, use this simplified task structure instead:
 
 #### 1.0 Proof Artifact(s)
 
-- GHA Run: Caller workflow triggers via `workflow_dispatch` and invokes the reusable workflow successfully
-- actionlint: Clean output with no errors demonstrates valid workflow YAML
+- GHA Run: `dev-qa-pipeline.yml` triggers via `workflow_dispatch` and invokes the reusable workflow successfully
+- GHA Run: `prod-pipeline.yml` triggers via `workflow_dispatch` and invokes the reusable workflow successfully
+- actionlint: Clean output with no errors for both workflow files
 
 #### 1.0 Tasks
 
@@ -253,7 +254,8 @@ TBD
 #### 2.0 Proof Artifact(s)
 
 - GHA Run: Dev job builds and deploys successfully using the reusable workflow
-- GHA Run: Non-dev jobs (if applicable) receive version from dev and deploy correctly
+- GHA Run: QA job receives version from dev and deploys correctly (in `dev-qa-pipeline.yml`)
+- GHA Run: Prod job deploys the specified version (in `prod-pipeline.yml`)
 - Diff: All Jenkins `scomAppPipeline()` parameters mapped to reusable workflow inputs
 
 #### 2.0 Tasks

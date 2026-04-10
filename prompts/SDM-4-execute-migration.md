@@ -39,14 +39,24 @@ Execute the migration task list to convert Jenkins pipelines into GitHub Actions
 
 For SCOM Java applications (the most common migration type), the implementation is a **thin caller workflow** that invokes the existing reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main`. The reusable workflow already handles build, deploy, and notification logic — the caller workflow only provides application-specific configuration.
 
-**What to produce:** A single workflow file in the application repo's `.github/workflows/` directory containing:
-- Trigger configuration (`workflow_dispatch` by default, optionally `push`/`pull_request`)
-- Permissions block (`contents: write`, `id-token: write`, plus `checks: write` and `pull-requests: write` if PR-triggered)
-- One job per environment, each calling the reusable workflow with `uses:`
-- Application-specific inputs: `container`, `java-version`, `servers` JSON, OIDC config, etc.
-- Environment promotion chain via `needs:` and `version` output passing for non-dev jobs
+**What to produce:** Two workflow files in the application repo's `.github/workflows/` directory:
 
-**Reference examples:** For complete single-environment and multi-environment caller workflow templates, read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Reference Caller Workflows").
+1. **`dev-qa-pipeline.yml`** containing:
+   - Trigger configuration (`workflow_dispatch` by default, optionally `push`/`pull_request`)
+   - Permissions block (`contents: write`, `id-token: write`, plus `checks: write` and `pull-requests: write` if PR-triggered)
+   - A `dev` job calling the reusable workflow with `environment: dev` (builds from source)
+   - A `qa` job with `needs: dev` calling the reusable workflow with `environment: qa` and `version: ${{ needs.dev.outputs.version }}`
+   - Application-specific inputs: `container`, `java-version`, `health-check-url`, `deploy-path`, OIDC config
+
+2. **`prod-pipeline.yml`** containing:
+   - `workflow_run` trigger that fires on dev/qa workflow success, plus `workflow_dispatch` for manual deploys
+   - Permissions block (`contents: write`, `id-token: write`, `actions: read`)
+   - A version resolution job that extracts the version from the completed dev/qa run
+   - A `prod` job calling the reusable workflow with `environment: prod` and the resolved version
+   - Environment protection rules gate manual approval before the deploy executes
+   - Application-specific inputs matching dev/qa but with prod-specific `health-check-url` and secrets
+
+**Reference examples:** For complete two-file caller workflow templates (dev-qa + prod), read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Reference Caller Workflows").
 
 ### SCOM Docker/AWS Application Migrations
 
