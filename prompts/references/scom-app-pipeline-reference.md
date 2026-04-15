@@ -25,7 +25,7 @@ SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@ma
 | `repository-prefix` | string | yes | — | JFrog Maven repo prefix (e.g., `scom-mvn`, `snet-mvn`). Configures both `{prefix}-release` and `{prefix}-snapshot` repos. |
 | `version` | string | no | `''` | App version (required for non-dev environments) |
 | `health-check-url` | string | yes | — | Health check URL curled via SSH on the target server after deploy (e.g., `http://b2capi.qa.subaru.com/b2capi/actuator/health`) |
-| `deploy-path` | string | yes | — | Absolute deploy path on the server (e.g., `/app/home/embedded_tomcat/b2capi`) |
+| `deploy-path` | string | yes | — | Absolute deploy path on the server. Spring Boot apps: `/app/home/embedded_tomcat/<container>` (e.g., `/app/home/embedded_tomcat/b2capi`). Spring MVC apps: `/app/home/<apache_num>/j2ee/<container>/webapps` (e.g., `/app/home/apache4/j2ee/serv/webapps`). |
 
 **Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
 
@@ -43,7 +43,9 @@ SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@ma
 When discovering SCOM Java apps, extract:
 1. The `container` name from the shared library call (e.g., `container: 'b2capi'`)
 2. The JDK version (translate Jenkins format: `java-8` → `'8'`, `java-21` → `'21'`)
-3. The `deploy-path` — absolute path on the server where the application is deployed
+3. The `deploy-path` — absolute path on the server where the application is deployed. The path pattern depends on the application framework:
+   - **Spring Boot** apps: `/app/home/embedded_tomcat/<container>` (e.g., `/app/home/embedded_tomcat/b2capi`)
+   - **Spring MVC** (non-Boot) apps: `/app/home/<apache_num>/j2ee/<container>/webapps` (e.g., `/app/home/apache4/j2ee/serv/webapps`). The apache number (e.g., `apache4`, `apache5`) varies per application and **must be confirmed with the user** during discovery.
 4. The `health-check-url` — URL used to verify the application is running after deploy
 5. The `deployment-mode` preference — `blue-green` (default) or `single`
 6. The environment promotion chain (dev → qa → staging → prod)

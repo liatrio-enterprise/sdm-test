@@ -97,7 +97,7 @@ If no Jenkinsfile is found and the application has build artifacts (pom.xml, Doc
 
 ## Step 0: Repository Details
 
-Before analyzing pipelines or build systems, detect the repository's default branch. This is needed for workflow trigger configuration — dev/QA workflows trigger on pull requests to the default branch, while prod workflows trigger on push to `main`.
+Before analyzing pipelines or build systems, detect the repository's default branch. This is needed for workflow trigger configuration — dev/QA workflows trigger on pull requests to the default branch, while prod workflows use `workflow_dispatch` only (manual trigger).
 
 **Detection method:**
 ```bash
@@ -115,7 +115,7 @@ If the above fails (e.g., `origin/HEAD` is not set), fall back to:
 |---|---|
 | **Default Branch** | `<detected branch name>` |
 
-> **Why this matters:** Not all repositories use `main` as their default branch. Some use `develop` or other branch names. The dev/QA caller workflow must target the actual default branch in its `pull_request` trigger. The prod workflow always targets `main`. For repos where the default branch is not `main`, a release merge into `main` triggers the prod deploy.
+> **Why this matters:** Not all repositories use `main` as their default branch. Some use `develop` or other branch names. The dev/QA caller workflow must target the actual default branch in its `pull_request` trigger. The prod workflow uses `workflow_dispatch` only (manual trigger) — it does not have an automatic push trigger to any branch.
 
 ## Step 1: Locate Jenkinsfiles
 
@@ -151,6 +151,9 @@ If the Jenkinsfile calls `scomAppPipeline(...)`, this is an **SCOM application p
 1. **Do NOT request the shared library source.** The shared library logic has already been migrated into the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml`.
 2. **Extract the parameters** passed to `scomAppPipeline()` — these map directly to the reusable workflow inputs (see SCOM Reusable Workflow Reference above).
 3. **Proceed with discovery** using the parameter mapping approach, supplemented by the repo's `pom.xml` for artifact/version details. Note: server hostnames and users are resolved dynamically by the env-config action — discovery should focus on extracting `container`, `deploy-path`, and `health-check-url` instead of individual server details.
+4. **Determine the `deploy-path`** based on the application framework (check `pom.xml` dependencies):
+   - **Spring Boot** apps → pre-fill as `/app/home/embedded_tomcat/<container>` (no clarification needed)
+   - **Spring MVC** (non-Boot) apps → the path follows `/app/home/<apache_num>/j2ee/<container>/webapps`, but the apache number varies per application. **Ask the user:** _"This is a Spring MVC application. The deploy path follows the pattern `/app/home/<apache_num>/j2ee/<container>/webapps`. What is the apache number for this application (e.g., `apache4`, `apache5`)?"_ Then pre-fill the deploy-path using their answer.
 
 Example SCOM Jenkinsfile:
 ```groovy
@@ -158,6 +161,8 @@ scomAppPipeline(enabled: true, container: 'serv', context: '/serv', deploy: true
 ```
 
 This maps to a caller workflow with: `container: serv`, `java-version: '8'`. The `deploy` and `context` Jenkins parameters are no longer direct inputs — `context` is incorporated into `health-check-url`, and deployment always occurs.
+
+Since this application uses Spring MVC (non-Boot), the deploy path follows `/app/home/<apache_num>/j2ee/serv/webapps`. The apache number must be confirmed with the user during discovery.
 
 #### Non-SCOM Wrapper Pattern
 
