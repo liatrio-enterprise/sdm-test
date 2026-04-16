@@ -46,15 +46,14 @@ For SCOM Java applications (the most common migration type), the implementation 
    - Permissions block (`contents: write`, `id-token: write`, plus `checks: write` and `pull-requests: write` if PR-triggered)
    - A `dev` job calling the reusable workflow with `environment: dev` (builds from source)
    - A `qa` job with `needs: dev` calling the reusable workflow with `environment: qa` and `version: ${{ needs.dev.outputs.version }}`
-   - Application-specific inputs: `container`, `java-version`, `health-check-url`, `deploy-path`, OIDC config
+   - Application-specific inputs: `container`, `java-version`, `app-type`, `health-check-url`, `deploy-path`, OIDC config
 
 2. **`prod-pipeline.yml`** containing:
-   - `workflow_run` trigger that fires on dev/qa workflow success, plus `workflow_dispatch` for manual deploys
-   - Permissions block (`contents: write`, `id-token: write`, `actions: read`)
-   - A version resolution job that extracts the version from the completed dev/qa run
-   - A `prod` job calling the reusable workflow with `environment: prod` and the resolved version
+   - `push` trigger on `main` (or `workflow_dispatch` for manual-only until validated)
+   - Permissions block (`contents: write`, `id-token: write`)
+   - A single `prod` job calling the reusable workflow with `environment: prod` — builds from source and deploys to prod
    - Environment protection rules gate manual approval before the deploy executes
-   - Application-specific inputs matching dev/qa but with prod-specific `health-check-url` and secrets
+   - Application-specific inputs matching dev/qa (including `app-type`) but with prod-specific `health-check-url` and secrets
 
 **Reference examples:** For complete two-file caller workflow templates (dev-qa + prod), read `prompts/references/scom-app-pipeline-reference.md` (section: "SCOM Java App Pipeline" → "Reference Caller Workflows").
 

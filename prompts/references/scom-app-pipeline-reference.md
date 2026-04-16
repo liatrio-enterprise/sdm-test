@@ -26,6 +26,7 @@ SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@ma
 | `version` | string | no | `''` | App version (required for non-dev environments) |
 | `health-check-url` | string | yes | — | Health check URL curled via SSH on the target server after deploy (e.g., `http://b2capi.qa.subaru.com/b2capi/actuator/health`) |
 | `deploy-path` | string | yes | — | Absolute deploy path on the server. Spring Boot apps: `/app/home/embedded_tomcat/<container>` (e.g., `/app/home/embedded_tomcat/b2capi`). Spring MVC apps: `/app/home/<apache_num>/j2ee/<container>/webapps` (e.g., `/app/home/apache4/j2ee/serv/webapps`). |
+| `app-type` | string | no | `'spring-boot'` | Application framework type: `spring-boot` (embedded Tomcat, uses `restart.sh`) or `spring-mvc` (external Tomcat 9, uses `manage-tomcat9 restart`). Controls the restart mechanism after WAR deployment. Detected from `pom.xml` during discovery. |
 
 **Required secrets:** `SSH_PRIVATE_KEY`, `TEAMS_WEBHOOK_URL`
 
@@ -43,13 +44,17 @@ SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@ma
 When discovering SCOM Java apps, extract:
 1. The `container` name from the shared library call (e.g., `container: 'b2capi'`)
 2. The JDK version (translate Jenkins format: `java-8` → `'8'`, `java-21` → `'21'`)
-3. The `deploy-path` — absolute path on the server where the application is deployed. The path pattern depends on the application framework:
-   - **Spring Boot** apps: `/app/home/embedded_tomcat/<container>` (e.g., `/app/home/embedded_tomcat/b2capi`)
-   - **Spring MVC** (non-Boot) apps: `/app/home/<apache_num>/j2ee/<container>/webapps` (e.g., `/app/home/apache4/j2ee/serv/webapps`). The apache number (e.g., `apache4`, `apache5`) varies per application and **must be confirmed with the user** during discovery.
-4. The `health-check-url` — URL used to verify the application is running after deploy
-5. The `deployment-mode` preference — `blue-green` (default) or `single`
-6. The environment promotion chain (dev → qa → staging → prod)
-7. OIDC and JFrog repository configuration (`oidc-provider-name`, `oidc-audience`, `repository-prefix`)
+3. The `app-type` — application framework classification that controls the restart mechanism and deploy-path pattern. Detect by examining `pom.xml`:
+   - **`spring-boot`**: `pom.xml` has `<parent>` referencing `spring-boot-starter-parent`. Uses `restart.sh` for restarts. Deploy path: `/app/home/embedded_tomcat/<container>`.
+   - **`spring-mvc`**: `pom.xml` has `spring-webmvc` or `spring-context` dependency but does NOT have `spring-boot-starter-parent` as parent. Uses `manage-tomcat9 restart` for restarts. Deploy path: `/app/home/<apache_num>/j2ee/<container>/webapps`. The apache number **must be confirmed with the user**.
+   - **`other`**: Neither pattern found — flag for manual review.
+4. The `deploy-path` — absolute path on the server, determined by `app-type`:
+   - **Spring Boot** (`app-type: spring-boot`): `/app/home/embedded_tomcat/<container>` (e.g., `/app/home/embedded_tomcat/b2capi`)
+   - **Spring MVC** (`app-type: spring-mvc`): `/app/home/<apache_num>/j2ee/<container>/webapps` (e.g., `/app/home/apache4/j2ee/serv/webapps`). The apache number varies per application and **must be confirmed with the user** during discovery.
+5. The `health-check-url` — URL used to verify the application is running after deploy
+6. The `deployment-mode` preference — `blue-green` (default) or `single`
+7. The environment promotion chain (dev → qa → staging → prod)
+8. OIDC and JFrog repository configuration (`oidc-provider-name`, `oidc-audience`, `repository-prefix`)
 
 ### Reference Caller Workflows
 
@@ -83,12 +88,13 @@ jobs:
       repository-prefix: scom-mvn
       health-check-url: http://b2capi.qa.subaru.com/b2capi/actuator/health
       deploy-path: /app/home/embedded_tomcat/b2capi
+      app-type: spring-boot
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
 ```
 
-**`prod-pipeline.yml` (push-to-main build + deploy, gated by manual approval):**
+**`prod-pipeline.yml` (push-to-main deploy, gated by environment protection rules):**
 ```yaml
 name: Prod Pipeline
 on:
@@ -98,24 +104,7 @@ permissions:
   contents: write
   id-token: write
 jobs:
-  build:
-    uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
-    with:
-      environment: dev
-      java-version: '21'
-      java-distribution: corretto
-      container: b2capi
-      oidc-provider-name: soa-scom-github
-      oidc-audience: soa-scom-github
-      repository-prefix: scom-mvn
-      health-check-url: http://b2capi.qa.subaru.com/b2capi/actuator/health
-      deploy-path: /app/home/embedded_tomcat/b2capi
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
-      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-
   prod:
-    needs: build
     uses: SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main
     with:
       environment: prod
@@ -125,9 +114,9 @@ jobs:
       oidc-provider-name: soa-scom-github
       oidc-audience: soa-scom-github
       repository-prefix: scom-mvn
-      version: ${{ needs.build.outputs.version }}
       health-check-url: http://b2capi.prod.subaru.com/b2capi/actuator/health
       deploy-path: /app/home/embedded_tomcat/b2capi
+      app-type: spring-boot
     secrets:
       SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_PROD_SSH }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
@@ -137,7 +126,7 @@ jobs:
 - Dev/QA pipeline uses a single job since both environments share the same server pair — no separate QA promotion step needed
 - Dev/QA is triggered by `pull_request` against the repository's **default branch** (may be `main`, `develop`, etc.), providing CI validation before merge
 - Prod pipeline always triggers on `push` to `main` — for repos where the default branch is not `main`, a release merge into `main` triggers the prod deploy
-- Prod first builds from source (`environment: dev` job), then deploys to prod using the built version — gated by environment protection rules for manual approval
+- Prod pipeline uses a single `prod` job that builds from source and deploys to prod — gated by GitHub Environment protection rules for manual approval
 - The reusable workflow defaults to blue-green deployment; callers can override with `deployment-mode: single`
 - `health-check-url` and `deploy-path` are required for all environments
 - Server hostnames, users, and ports are resolved automatically by the env-config action — callers only pass `container` and `environment`
@@ -353,3 +342,4 @@ jobs:
 | (not in Jenkins) | `deployment-mode` | New — defaults to `blue-green`; set to `single` if needed |
 | (not in Jenkins) | `oidc-provider-name`, `oidc-audience` | New — ask user for OIDC config |
 | (not in Jenkins) | `repository-prefix` | New — ask user for JFrog repo prefix |
+| (not in Jenkins — detect from pom.xml) | `app-type` | New — detect from pom.xml: `spring-boot-starter-parent` → `spring-boot`, `spring-webmvc`/`spring-context` without Boot → `spring-mvc` |
