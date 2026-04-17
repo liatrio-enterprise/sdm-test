@@ -51,7 +51,7 @@ For SCOM Java applications (the most common migration type), the implementation 
 2. **`prod-pipeline.yml`** containing:
    - `push` trigger on `main` (or `workflow_dispatch` for manual-only until validated)
    - Permissions block (`contents: write`, `id-token: write`)
-   - A single `prod` job calling the reusable workflow with `environment: prod` — builds from source and deploys to prod
+   - A single `prod` job calling the reusable workflow with `environment: prod` — resolves version from `pom.xml`, downloads the pre-built artifact from Artifactory, and deploys to prod (no build step runs)
    - Environment protection rules gate manual approval before the deploy executes
    - Application-specific inputs matching dev/qa (including `app-type`) but with prod-specific `health-check-url` and secrets
 

@@ -68,7 +68,7 @@ For SCOM application migrations that produce a caller workflow invoking `scom-ap
 
 - **GATE E — Parameter Completeness**: Every Jenkins `scomAppPipeline()` parameter has been mapped to a reusable workflow input. No required inputs are missing. `app-type`, `health-check-url`, and `deploy-path` are present for every environment job. The `app-type` value is consistent with the `deploy-path` pattern (`spring-boot` uses `/app/home/embedded_tomcat/...`, `spring-mvc` uses `/app/home/<apache_num>/j2ee/.../webapps`).
 - **GATE F — Two-File Pattern**: The migration produces two workflow files (`dev-qa-pipeline.yml` and `prod-pipeline.yml`). Both files exist and are valid YAML.
-- **GATE G — Environment Chain**: In `dev-qa-pipeline.yml`, the QA job uses `needs: dev` and passes `version: ${{ needs.dev.outputs.version }}`. `prod-pipeline.yml` uses a single `prod` job that builds from source and deploys directly to prod — no version passing or chaining required.
+- **GATE G — Environment Chain**: In `dev-qa-pipeline.yml`, the QA job uses `needs: dev` and passes `version: ${{ needs.dev.outputs.version }}`. `prod-pipeline.yml` uses a single `prod` job with `environment: prod` — the reusable workflow resolves version from `pom.xml`, downloads the pre-built artifact from Artifactory, and deploys (no build step runs).
 - **GATE H — Reusable Workflow Reference**: The `uses:` directive points to `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml@main` (or the appropriate branch/tag) in both workflow files.
 
 ### SCOM Docker/AWS Caller Workflow Validation (additional checks)
@@ -143,7 +143,7 @@ Cross-reference:
 
 5. **Parameter mapping** → every Jenkins `scomAppPipeline()` parameter has a corresponding reusable workflow input in the caller workflow
 6. **Deployment configuration** → `app-type`, `health-check-url`, and `deploy-path` are present and non-empty for every environment job. The `app-type` value matches the deploy-path pattern and the pom.xml framework classification from the discovery report.
-7. **Environment promotion** → in `dev-qa-pipeline.yml`, QA chains via `needs: dev` and passes `version`; `prod-pipeline.yml` uses a single `prod` job that builds from source and deploys directly
+7. **Environment promotion** → in `dev-qa-pipeline.yml`, QA chains via `needs: dev` and passes `version`; `prod-pipeline.yml` uses a single `prod` job that resolves version from `pom.xml` and downloads the pre-built artifact from Artifactory (no build step runs)
 8. **Secret references** → `SSH_PRIVATE_KEY` and `TEAMS_WEBHOOK_URL` are passed correctly (directly or via `secrets: inherit`)
 9. **Permissions** → caller workflows include `contents: write` and `id-token: write` at minimum
 10. **Two-file pattern** → migration produces both `dev-qa-pipeline.yml` and `prod-pipeline.yml`

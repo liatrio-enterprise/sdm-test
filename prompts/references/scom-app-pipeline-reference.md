@@ -60,7 +60,7 @@ When discovering SCOM Java apps, extract:
 
 Applications use a **two-file pattern**:
 1. **`dev-qa-pipeline.yml`** — Triggered by pull requests against the repository's **default branch**. Builds from source and deploys to the dev/QA servers (shared server pair). Uses a single job since dev and QA share the same deployment targets.
-2. **`prod-pipeline.yml`** — Triggered on push to `main` (i.e., PR merge or release merge). Builds from source, then deploys to prod gated by environment protection rules for manual approval.
+2. **`prod-pipeline.yml`** — Triggered on push to `main` (i.e., PR merge or release merge). Resolves the application version from `pom.xml`, downloads the pre-built artifact from Artifactory, and deploys to prod gated by environment protection rules for manual approval. No build occurs — the artifact was already built and published during the dev pipeline.
 
 > **Branch note:** Not all repositories use `main` as their default branch (e.g., some use `develop`). The dev/QA pipeline must target the repository's actual default branch in its `pull_request` trigger. The prod pipeline always targets `main` — for repos where the default branch is not `main`, a release merge from the default branch into `main` triggers the prod deploy.
 
@@ -118,7 +118,7 @@ jobs:
       deploy-path: /app/home/embedded_tomcat/b2capi
       app-type: spring-boot
     secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_PROD_SSH }}
+      SSH_PRIVATE_KEY: ${{ secrets.SCOM_CICD_DEV_SSH }}
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
 ```
 
@@ -126,7 +126,7 @@ jobs:
 - Dev/QA pipeline uses a single job since both environments share the same server pair — no separate QA promotion step needed
 - Dev/QA is triggered by `pull_request` against the repository's **default branch** (may be `main`, `develop`, etc.), providing CI validation before merge
 - Prod pipeline always triggers on `push` to `main` — for repos where the default branch is not `main`, a release merge into `main` triggers the prod deploy
-- Prod pipeline uses a single `prod` job that builds from source and deploys to prod — gated by GitHub Environment protection rules for manual approval
+- Prod pipeline uses a single `prod` job that resolves version from `pom.xml`, downloads the pre-built artifact from Artifactory, and deploys to prod — no build step runs (the reusable workflow only builds when `environment: dev`). Gated by GitHub Environment protection rules for manual approval
 - The reusable workflow defaults to blue-green deployment; callers can override with `deployment-mode: single`
 - `health-check-url` and `deploy-path` are required for all environments
 - Server hostnames, users, and ports are resolved automatically by the env-config action — callers only pass `container` and `environment`

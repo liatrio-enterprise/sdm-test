@@ -71,6 +71,7 @@ Ask clarifying questions to gather detail not available from the Jenkinsfile alo
 
 **If SCOM Java pipeline detected** (Jenkinsfile calls `scomAppPipeline()`):
 
+- Application type confirmation: The discovery report classified this as `[app-type]` (from pom.xml analysis). Does this match? (`spring-boot` = embedded Tomcat + `restart.sh`, `spring-mvc` = external Tomcat 9 + `manage-tomcat9 restart`)
 - Deploy path on the target server (e.g., `/app/home/embedded_tomcat/b2capi`)
 - Health check URL per environment (e.g., `http://b2capi.qa.subaru.com/b2capi/actuator/health`)
 - OIDC provider name and audience for JFrog Artifactory (e.g., `soa-scom-github`)
@@ -78,7 +79,7 @@ Ask clarifying questions to gather detail not available from the Jenkinsfile alo
 - Deployment mode preference: blue-green (default, zero-downtime) or single (sequential)?
 - Environment promotion chain (e.g., dev → qa → staging → prod)
 
-**Note:** For SCOM Java apps, the reusable workflow already exists — no new one is needed. Server hostnames and users are resolved dynamically by the env-config action.
+**Note:** For SCOM Java apps, the reusable workflow already exists — no new one is needed. Server hostnames and users are resolved dynamically by the env-config action. The `app-type` input must be included in every caller workflow job's `with:` block — it controls the restart mechanism (`restart.sh` vs `manage-tomcat9`) and must be consistent with `deploy-path` (e.g., `spring-boot` uses `/app/home/embedded_tomcat/...`, `spring-mvc` uses `/app/home/<apache_num>/j2ee/.../webapps`).
 
 **If Docker/AWS deployment detected** (Dockerfile + AWS infrastructure):
 

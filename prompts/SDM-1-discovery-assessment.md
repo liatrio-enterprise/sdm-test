@@ -150,10 +150,18 @@ If the Jenkinsfile calls `scomAppPipeline(...)`, this is an **SCOM application p
 
 1. **Do NOT request the shared library source.** The shared library logic has already been migrated into the reusable workflow at `SubaruOfAmerica/devops-cicd-workflows/.github/workflows/scom-app-pipeline.yml`.
 2. **Extract the parameters** passed to `scomAppPipeline()` — these map directly to the reusable workflow inputs (see SCOM Reusable Workflow Reference above).
-3. **Proceed with discovery** using the parameter mapping approach, supplemented by the repo's `pom.xml` for artifact/version details. Note: server hostnames and users are resolved dynamically by the env-config action — discovery should focus on extracting `container`, `deploy-path`, and `health-check-url` instead of individual server details.
-4. **Determine the `deploy-path`** based on the application framework (check `pom.xml` dependencies):
-   - **Spring Boot** apps → pre-fill as `/app/home/embedded_tomcat/<container>` (no clarification needed)
-   - **Spring MVC** (non-Boot) apps → the path follows `/app/home/<apache_num>/j2ee/<container>/webapps`, but the apache number varies per application. **Ask the user:** _"This is a Spring MVC application. The deploy path follows the pattern `/app/home/<apache_num>/j2ee/<container>/webapps`. What is the apache number for this application (e.g., `apache4`, `apache5`)?"_ Then pre-fill the deploy-path using their answer.
+3. **Classify the application type** (`app-type`) by examining `pom.xml` dependencies. This classification controls the restart mechanism and deploy-path pattern in the reusable workflow:
+   - **`spring-boot`**: The `pom.xml` has `<parent>` referencing `spring-boot-starter-parent` (any version). These apps use embedded Tomcat and the `restart.sh` restart mechanism.
+   - **`spring-mvc`**: The `pom.xml` has `spring-webmvc` or `spring-context` as a dependency but does NOT have `spring-boot-starter-parent` as a parent. These apps deploy to external Tomcat 9 and use `manage-tomcat9 restart`.
+   - **`other`**: Neither pattern is found. The app may use a custom framework (e.g., proprietary fw3), be a shared library JAR, or a non-Spring application. Flag for manual review of deploy-path and restart mechanism.
+
+   Record the result as `app-type: spring-boot | spring-mvc | other` in the discovery report.
+
+4. **Determine the `deploy-path`** based on the classified `app-type`:
+   - **`spring-boot`** → pre-fill as `/app/home/embedded_tomcat/<container>` (no clarification needed)
+   - **`spring-mvc`** → the path follows `/app/home/<apache_num>/j2ee/<container>/webapps`, but the apache number varies per application. **Ask the user:** _"This is a Spring MVC application (app-type: spring-mvc). The deploy path follows the pattern `/app/home/<apache_num>/j2ee/<container>/webapps`. What is the apache number for this application (e.g., `apache4`, `apache5`)?"_ Then pre-fill the deploy-path using their answer.
+   - **`other`** → **Ask the user** for the full deploy-path and restart mechanism. Do not assume a pattern.
+5. **Proceed with discovery** using the parameter mapping approach, supplemented by the repo's `pom.xml` for artifact/version details. Note: server hostnames and users are resolved dynamically by the env-config action — discovery should focus on extracting `container`, `app-type`, `deploy-path`, and `health-check-url` instead of individual server details.
 
 Example SCOM Jenkinsfile:
 ```groovy
@@ -162,7 +170,7 @@ scomAppPipeline(enabled: true, container: 'serv', context: '/serv', deploy: true
 
 This maps to a caller workflow with: `container: serv`, `java-version: '8'`. The `deploy` and `context` Jenkins parameters are no longer direct inputs — `context` is incorporated into `health-check-url`, and deployment always occurs.
 
-Since this application uses Spring MVC (non-Boot), the deploy path follows `/app/home/<apache_num>/j2ee/serv/webapps`. The apache number must be confirmed with the user during discovery.
+Since this application's `pom.xml` contains `spring-webmvc` without `spring-boot-starter-parent`, it is classified as `app-type: spring-mvc`. The deploy path follows `/app/home/<apache_num>/j2ee/serv/webapps`. The apache number must be confirmed with the user during discovery.
 
 #### Non-SCOM Wrapper Pattern
 
@@ -447,6 +455,9 @@ Evaluate whether this migration request is appropriately sized.
 
 ## Repository Details
 [Default branch name and Git metadata]
+
+## Application Type
+[For SCOM Java apps: `spring-boot`, `spring-mvc`, or `other` — detected from pom.xml analysis. Records the `app-type` input for the reusable workflow, the deploy-path pattern, and the restart mechanism. Include detection evidence (e.g., "pom.xml parent is spring-boot-starter-parent 4.0.2").]
 
 ## Pipeline Inventory
 [Table of all Jenkinsfiles found with classification]
